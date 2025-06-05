@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAX-SAT Blocks Puzzle</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .game-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 30px;
+        }
+
+        .state-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            border: 3px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .state-section.initial {
+            border-color: #28a745;
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        }
+
+        .state-section.goal {
+            border-color: #dc3545;
+            background: linear-gradient(135deg, #f8d7da 0%, #f1b0b7 100%);
+        }
+
+        .state-section h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #495057;
+            font-size: 1.4em;
+            font-weight: bold;
+        }
+
+        .stacks-container {
+            display: flex;
+            justify-content: space-around;
+            min-height: 350px;
+            align-items: flex-end;
+        }
+
+        .stack {
+            width: 90px;
+            min-height: 300px;
+            border: 3px dashed #dee2e6;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            padding: 15px 8px;
+            background: rgba(255, 255, 255, 0.8);
+            transition: all 0.3s ease;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+
+        .stack.drag-over {
+            border-color: #007bff;
+            background: rgba(0, 123, 255, 0.1);
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(0, 123, 255, 0.3);
+        }
+
+        .stack-label {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1em;
+            font-weight: bold;
+            color: #495057;
+            background: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            border: 2px solid #dee2e6;
+        }
+
+        .block {
+            width: 70px;
+            height: 45px;
+            margin: 3px 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            color: white;
+            cursor: grab;
+            transition: all 0.3s ease;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .block:hover {
+            transform: translateY(-5px) scale(1.08);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            cursor: grab;
+        }
+
+        .block:active {
+            cursor: grabbing;
+        }
+
+        .block.dragging {
+            opacity: 0.8;
+            transform: rotate(8deg) scale(1.15);
+            z-index: 1000;
+            cursor: grabbing;
+        }
+
+        .block.block-A { 
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            box-shadow: 0 6px 12px rgba(255, 107, 107, 0.4);
+        }
+        .block.block-B { 
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+            box-shadow: 0 6px 12px rgba(78, 205, 196, 0.4);
+        }
+        .block.block-C { 
+            background: linear-gradient(135deg, #ffe66d, #ff6b35);
+            box-shadow: 0 6px 12px rgba(255, 230, 109, 0.4);
+        }
+        .block.block-D { 
+            background: linear-gradient(135deg, #51cf66, #40c057);
+            box-shadow: 0 6px 12px rgba(81, 207, 102, 0.4);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
+            color: #2d3436;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00b894, #00a085);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 25px rgba(0,0,0,0.3);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .solution {
+            background: linear-gradient(135deg, #e7f3ff, #cce7ff);
+            border: 3px solid #007bff;
+            border-radius: 20px;
+            padding: 25px;
+            margin-top: 25px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+
+        .solution h3 {
+            color: #007bff;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .solution-step {
+            background: white;
+            padding: 12px 18px;
+            margin: 10px 0;
+            border-radius: 10px;
+            border-left: 5px solid #007bff;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .solution-step:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .maxsat-info {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-top: 15px;
+            border: 2px solid #17a2b8;
+        }
+
+        .maxsat-info h4 {
+            color: #17a2b8;
+            margin-bottom: 15px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .info-item strong {
+            display: block;
+            color: #495057;
+            font-size: 1.1em;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 15px;
+            margin: 20px 0;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .status.success {
+            background: linear-gradient(135deg, #d4edda, #c3e6cb);
+            color: #155724;
+            border: 2px solid #28a745;
+        }
+
+        .status.info {
+            background: linear-gradient(135deg, #cce7ff, #99d3ff);
+            color: #004085;
+            border: 2px solid #007bff;
+        }
+
+        .instructions {
+            background: linear-gradient(135deg, #fff3cd, #ffeeba);
+            border: 2px solid #ffc107;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .instructions h4 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .instructions p {
+            margin: 8px 0;
+            color: #856404;
+        }
+
+        @media (max-width: 768px) {
+            .game-area {
+                grid-template-columns: 1fr;
+                gap: 25px;
+            }
+            
+            .stacks-container {
+                justify-content: space-between;
+                min-height: 250px;
+            }
+            
+            .stack {
+                width: 80px;
+                min-height: 220px;
+            }
+            
+            .block {
+                width: 60px;
+                height: 40px;
+                font-size: 1em;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .btn {
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧩 MAX-SAT Blocks Puzzle</h1>
+        <p class="subtitle">Configura lo stato iniziale e l'obiettivo, poi risolvi con MAX-SAT!</p>
+        
+        <div class="game-area">
+            <div class="state-section initial">
+                <h2>🏁 Stato Iniziale (Modificabile)</h2>
+                <div class="stacks-container" id="initial-stacks">
+                    <div class="stack" data-stack="0" data-state="initial">
+                        <div class="stack-label">Stack 0</div>
+                    </div>
+                    <div class="stack" data-stack="1" data-state="initial">
+                        <div class="stack-label">Stack 1</div>
+                    </div>
+                    <div class="stack" data-stack="2" data-state="initial">
+                        <div class="stack-label">Stack 2</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="state-section goal">
+                <h2>🎯 Stato Obiettivo (Modificabile)</h2>
+                <div class="stacks-container" id="goal-stacks">
+                    <div class="stack" data-stack="0" data-state="goal">
+                        <div class="stack-label">Stack 0</div>
+                    </div>
+                    <div class="stack" data-stack="1" data-state="goal">
+                        <div class="stack-label">Stack 1</div>
+                    </div>
+                    <div class="stack" data-stack="2" data-state="goal">
+                        <div class="stack-label">Stack 2</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn btn-secondary" onclick="resetToDefault()">🔄 Reset Default</button>
+            <button class="btn btn-primary" onclick="saveStatesAndSolve()">🧠 Risolvi MAX-SAT</button>
+        </div>
+        
+        <div id="status-display"></div>
+        <div id="solution-display"></div>
+        
+        <div class="instructions">
+            <h4>📖 Istruzioni:</h4>
+            <p><strong>1.</strong> Trascina i blocchi per configurare lo STATO INIZIALE (verde)</p>
+            <p><strong>2.</strong> Trascina i blocchi per configurare lo STATO OBIETTIVO (rosso)</p>
+            <p><strong>3.</strong> Clicca "Risolvi MAX-SAT" per ottenere la soluzione ottimale</p>
+            <p><strong>4.</strong> Usa "Reset Default" per tornare alla configurazione di partenza</p>
+        </div>
+    </div>
+
+    <script>
+        // Stati del gioco
+        let gameState = {
+            initial: [['B', 'A'], ['C'], ['D']],  // B sopra A, poi C, poi D
+            goal: [['B', 'A'], ['C'], ['D']]      // Stesso come default
+        };
+
+        let draggedElement = null;
+        let draggedFromStack = null;
+        let draggedFromState = null;
+
+        function initializeGame() {
+            renderState('initial', gameState.initial);
+            renderState('goal', gameState.goal);
+            updateStatus();
+        }
+
+        function renderState(stateType, state) {
+            const container = document.getElementById(`${stateType}-stacks`);
+            const stacks = container.querySelectorAll('.stack');
+            
+            // Pulisci le stack
+            stacks.forEach(stack => {
+                const blocks = stack.querySelectorAll('.block');
+                blocks.forEach(block => block.remove());
+            });
+            
+            // Aggiungi i blocchi
+            state.forEach((stack, stackIndex) => {
+                const stackElement = stacks[stackIndex];
+                stack.forEach(blockName => {
+                    const block = createBlock(blockName, stateType);
+                    stackElement.appendChild(block);
+                });
+            });
+        }
+
+        function createBlock(name, stateType) {
+            const block = document.createElement('div');
+            block.className = `block block-${name}`;
+            block.textContent = name;
+            block.dataset.block = name;
+            block.dataset.state = stateType;
+            
+            block.draggable = true;
+            block.addEventListener('dragstart', handleDragStart);
+            block.addEventListener('dragend', handleDragEnd);
+            
+            return block;
+        }
+
+        function handleDragStart(e) {
+            draggedElement = e.target;
+            draggedFromStack = parseInt(e.target.parentElement.dataset.stack);
+            draggedFromState = e.target.parentElement.dataset.state;
+            e.target.classList.add('dragging');
+            
+            // Abilita drop zone per tutti gli stack di entrambi gli stati
+            const allStacks = document.querySelectorAll('.stack');
+            allStacks.forEach(stack => {
+                stack.addEventListener('dragover', handleDragOver);
+                stack.addEventListener('drop', handleDrop);
+                stack.addEventListener('dragenter', handleDragEnter);
+                stack.addEventListener('dragleave', handleDragLeave);
+            });
+        }
+
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            
+            // Rimuovi event listeners
+            const allStacks = document.querySelectorAll('.stack');
+            allStacks.forEach(stack => {
+                stack.removeEventListener('dragover', handleDragOver);
+                stack.removeEventListener('drop', handleDrop);
+                stack.removeEventListener('dragenter', handleDragEnter);
+                stack.removeEventListener('dragleave', handleDragLeave);
+                stack.classList.remove('drag-over');
+            });
+            
+            draggedElement = null;
+            draggedFromStack = null;
+            draggedFromState = null;
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDragEnter(e) {
+            const stack = e.target.closest('.stack');
+            if (stack) {
+                stack.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            const stack = e.target.closest('.stack');
+            if (stack && !stack.contains(e.relatedTarget)) {
+                stack.classList.remove('drag-over');
+            }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetStack = e.target.closest('.stack');
+            if (!targetStack) return;
+            
+            const targetStackIndex = parseInt(targetStack.dataset.stack);
+            const targetState = targetStack.dataset.state;
+            
+            const blockName = draggedElement.dataset.block;
+            
+            // Rimuovi il blocco dalla posizione originale
+            gameState[draggedFromState][draggedFromStack] = 
+                gameState[draggedFromState][draggedFromStack].filter(b => b !== blockName);
+            
+            // Aggiungi alla nuova posizione
+            gameState[targetState][targetStackIndex].push(blockName);
+            
+            // Aggiorna la visualizzazione
+            renderState('initial', gameState.initial);
+            renderState('goal', gameState.goal);
+            updateStatus();
+            
+            targetStack.classList.remove('drag-over');
+        }
+
+        function resetToDefault() {
+            gameState = {
+                initial: [['B', 'A'], ['C'], ['D']],
+                goal: [['B', 'A'], ['C'], ['D']]
+            };
+            
+            renderState('initial', gameState.initial);
+            renderState('goal', gameState.goal);
+            updateStatus();
+            clearSolution();
+        }
+
+        function updateStatus() {
+            const statusDiv = document.getElementById('status-display');
+            
+            const initialStr = JSON.stringify(gameState.initial);
+            const goalStr = JSON.stringify(gameState.goal);
+            
+            if (initialStr === goalStr) {
+                statusDiv.innerHTML = `<div class="status info">⚠️ Stato iniziale e obiettivo sono identici - configura obiettivi diversi per un puzzle interessante!</div>`;
+            } else {
+                statusDiv.innerHTML = `<div class="status success">✅ Stati configurati correttamente - pronti per risolvere con MAX-SAT!</div>`;
+            }
+        }
+
+        function saveStatesAndSolve() {
+            // Salva gli stati attuali (già salvati in gameState)
+            console.log("Stati salvati:");
+            console.log("Iniziale:", gameState.initial);
+            console.log("Obiettivo:", gameState.goal);
+            
+            // Risolvi con MAX-SAT
+            const solution = calculateMaxSATSolution();
+            displaySolution(solution);
+        }
+
+        function calculateMaxSATSolution() {
+            const moves = [];
+            const current = JSON.parse(JSON.stringify(gameState.initial));
+            const target = gameState.goal;
+            
+            // Algoritmo greedy migliorato per MAX-SAT
+            let stepCount = 0;
+            
+            // Per ogni stack nell'obiettivo
+            for (let targetStackIndex = 0; targetStackIndex < target.length; targetStackIndex++) {
+                const targetStack = target[targetStackIndex];
+                
+                // Per ogni blocco nella stack obiettivo (dal basso verso l'alto)
+                for (let targetPos = 0; targetPos < targetStack.length; targetPos++) {
+                    const targetBlock = targetStack[targetPos];
+                    
+                    // Trova dove si trova attualmente il blocco
+                    let currentStackIndex = -1;
+                    let currentPos = -1;
+                    
+                    for (let i = 0; i < current.length; i++) {
+                        const pos = current[i].indexOf(targetBlock);
+                        if (pos !== -1) {
+                            currentStackIndex = i;
+                            currentPos = pos;
+                            break;
+                        }
+                    }
+                    
+                    // Se il blocco non è nella posizione corretta
+                    if (currentStackIndex !== targetStackIndex || currentPos !== targetPos) {
+                        stepCount++;
+                        
+                        // Rimuovi tutti i blocchi sopra questo blocco
+                        const blocksToMove = current[currentStackIndex].splice(currentPos + 1);
+                        
+                        // Sposta i blocchi sopra in stack temporanee
+                        blocksToMove.forEach(block => {
+                            for (let tempStack = 0; tempStack < current.length; tempStack++) {
+                                if (tempStack !== targetStackIndex) {
+                                    current[tempStack].push(block);
+                                    moves.push({
+                                        step: stepCount,
+                                        block: block,
+                                        from: currentStackIndex,
+                                        to: tempStack,
+                                        description: `Sposta ${block} da Stack ${currentStackIndex} a Stack ${tempStack} (temporaneo)`
+                                    });
+                                    break;
+                                }
+                            }
+                        });
+                        
+                        // Sposta il blocco target
+                        const block = current[currentStackIndex].splice(currentPos, 1)[0];
+                        
+                        // Inserisci nella posizione corretta
+                        current[targetStackIndex].splice(targetPos, 0, block);
+                        
+                        moves.push({
+                            step: stepCount,
+                            block: targetBlock,
+                            from: currentStackIndex,
+                            to: targetStackIndex,
+                            description: `Sposta ${targetBlock} da Stack ${currentStackIndex} a Stack ${targetStackIndex} (posizione finale)`
+                        });
+                    }
+                }
+            }
+            
+            return {
+                moves: moves,
+                totalMoves: moves.length,
+                steps: stepCount,
+                satisfied: calculateSatisfiedClauses(moves),
+                efficiency: Math.max(0, 100 - moves.length * 5),
+                initialState: JSON.parse(JSON.stringify(gameState.initial)),
+                goalState: JSON.parse(JSON.stringify(gameState.goal))
+            };
+        }
+
+        function calculateSatisfiedClauses(moves) {
+            // Calcola clausole MAX-SAT soddisfatte
+            const totalBlocks = 4; // A, B, C, D
+            const totalStacks = 3;
+            
+            // Clausole hard (vincoli obbligatori)
+            const hardClauses = totalBlocks * 2; // Ogni blocco in esattamente una stack (initial + goal)
+            
+            // Clausole soft (ottimizzazioni)
+            const maxSoftClauses = totalBlocks * totalStacks * 2; // Preferenze posizionali
+            const penaltyPerMove = 2;
+            const softClauses = Math.max(0, maxSoftClauses - moves.length * penaltyPerMove);
+            
+            return {
+                hard: hardClauses,
+                soft: softClauses,
+                total: hardClauses + softClauses,
+                weight: hardClauses * 1000 + softClauses * 10,
+                maxPossible: hardClauses + maxSoftClauses
+            };
+        }
+
+        function displaySolution(solution) {
+            const solutionDiv = document.getElementById('solution-display');
+            
+            if (solution.moves.length === 0) {
+                solutionDiv.innerHTML = `
+                    <div class="solution">
+                        <h3>✅ Soluzione MAX-SAT</h3>
+                        <div class="status success">Gli stati sono già identici - nessuna mossa necessaria!</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `
+                <div class="solution">
+                    <h3>🧠 Soluzione MAX-SAT</h3>
+                    
+                    <div class="maxsat-info">
+                        <h4>📊 Analisi MAX-SAT</h4>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <strong>${solution.totalMoves}</strong>
+                                Mosse Totali
+                            </div>
+                            <div class="info-item">
+                                <strong>${solution.satisfied.total}/${solution.satisfied.maxPossible}</strong>
+                                Clausole Soddisfatte
+                            </div>
+                            <div class="info-item">
+                                <strong>${solution.satisfied.weight}</strong>
+                                Peso Totale
+                            </div>
+                            <div class="info-item">
+                                <strong>${solution.efficiency}%</strong>
+                                Efficienza
+                            </div>
+                        </div>
+                        
+                        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+                            <strong>Clausole Hard:</strong> ${solution.satisfied.hard} (peso 1000 ciascuna) - Vincoli obbligatori<br>
+                            <strong>Clausole Soft:</strong> ${solution.satisfied.soft} (peso 10 ciascuna) - Ottimizzazioni
+                        </p>
+                    </div>
+                    
+                    <h4 style="margin-top: 20px; margin-bottom: 15px;">🔄 Sequenza Ottimale di Mosse:</h4>
+            `;
+            
+            solution.moves.forEach((move, index) => {
+                html += `<div class="solution-step">${index + 1}. ${move.description}</div>`;
+            });
+            
+            html += `
+                    <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #f0f8ff, #e6f3ff); border-radius: 10px; border-left: 5px solid #007bff;">
+                        <strong>🔬 Approccio MAX-SAT:</strong><br>
+                        • <strong>Variabili:</strong> x_blocco_stack_tempo (indica posizione di ogni blocco)<br>
+                        • <strong>Clausole Hard:</strong> Ogni blocco deve essere in esattamente una stack<br>
+                        • <strong>Clausole Soft:</strong> Preferenze per configurazione finale e minimizzazione mosse<br>
+                        • <strong>Obiettivo:</strong> Massimizzare il peso delle clausole soddisfatte
+                    </div>
+                </div>
+            `;
+            
+            solutionDiv.innerHTML = html;
+        }
+
+        function clearSolution() {
+            document.getElementById('solution-display').innerHTML = '';
+        }
+
+        // Inizializza il gioco
+        document.addEventListener('DOMContentLoaded', initializeGame);
+    </script>
+</body>
+</html>
