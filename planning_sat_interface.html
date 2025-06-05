@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planning with SAT - Blocks World</title>
+    <title>SAT Planning - Blocks World</title>
     <style>
         * {
             margin: 0;
@@ -19,134 +19,121 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
-            padding: 30px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
 
-        .app-header {
-            background: linear-gradient(135deg, #e8f5e8, #d4edda);
-            border: 2px solid #28a745;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
             text-align: center;
         }
 
-        .app-header h1 {
-            color: #28a745;
+        .header h1 {
+            font-size: 2.5rem;
             margin-bottom: 10px;
-            font-size: 2.5em;
+            font-weight: 700;
         }
 
-        .app-header p {
-            color: #155724;
-            margin: 5px 0;
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
         }
 
-        .connection-status {
+        .main-content {
+            padding: 30px;
+        }
+
+        .controls {
             display: flex;
-            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
             align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            padding: 15px;
-            border-radius: 10px;
-            font-weight: bold;
         }
 
-        .connection-status.connected {
-            background: linear-gradient(135deg, #d4edda, #c3e6cb);
-            border: 2px solid #28a745;
-            color: #155724;
-        }
-
-        .connection-status.disconnected {
-            background: linear-gradient(135deg, #f8d7da, #f5c6cb);
-            border: 2px solid #dc3545;
-            color: #721c24;
-        }
-
-        .connection-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            animation: pulse 1.5s infinite;
-        }
-
-        .connection-dot.green {
-            background: #28a745;
-        }
-
-        .connection-dot.red {
-            background: #dc3545;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .api-config {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 2px solid #e9ecef;
-        }
-
-        .api-config h3 {
-            color: #495057;
-            margin-bottom: 15px;
-        }
-
-        .api-input-group {
+        .control-group {
             display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 10px;
+            flex-direction: column;
+            gap: 5px;
         }
 
-        .api-input-group label {
-            min-width: 100px;
-            font-weight: bold;
-            color: #495057;
+        .control-group label {
+            font-weight: 600;
+            color: #333;
+            font-size: 0.9rem;
         }
 
-        .api-input-group input {
-            flex: 1;
-            padding: 8px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 5px;
-            font-family: monospace;
+        .control-group input, .control-group select {
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
         }
 
-        .api-input-group button {
-            padding: 8px 15px;
-            background: #007bff;
-            color: white;
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .btn {
+            padding: 12px 24px;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .api-input-group button:hover {
-            background: #0056b3;
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
         }
 
-        .game-area {
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 2px solid #dee2e6;
+        }
+
+        .btn-secondary:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(86, 171, 47, 0.3);
+        }
+
+        .workspace {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 40px;
+            gap: 30px;
             margin-bottom: 30px;
         }
 
-        .state-section {
+        .state-container {
             background: #f8f9fa;
             border-radius: 15px;
             padding: 25px;
@@ -154,25 +141,63 @@
             transition: all 0.3s ease;
         }
 
-        .state-section.initial {
+        .state-container.initial {
             border-color: #28a745;
             background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
         }
 
-        .state-section.goal {
+        .state-container.goal {
             border-color: #dc3545;
             background: linear-gradient(135deg, #f8d7da 0%, #f1b0b7 100%);
         }
 
-        .state-section h2 {
+        .state-container h3 {
             text-align: center;
             margin-bottom: 20px;
-            color: #495057;
             font-size: 1.4em;
+            color: #495057;
             font-weight: bold;
         }
 
-        .stacks-container {
+        .block {
+            width: 70px;
+            height: 45px;
+            margin: 3px 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            color: white;
+            cursor: grab;
+            transition: all 0.3s ease;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            user-select: none;
+        }
+
+        .block:hover {
+            transform: translateY(-5px) scale(1.08);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .block.dragging {
+            opacity: 0.8;
+            transform: rotate(8deg) scale(1.15);
+            z-index: 1000;
+            cursor: grabbing;
+        }
+
+        .block[data-block="A"] { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
+        .block[data-block="B"] { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .block[data-block="C"] { background: linear-gradient(135deg, #ffe66d, #ff6b35); }
+        .block[data-block="D"] { background: linear-gradient(135deg, #51cf66, #40c057); }
+        .block[data-block="E"] { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .block[data-block="F"] { background: linear-gradient(135deg, #1abc9c, #16a085); }
+
+        .stacks-area {
             display: flex;
             justify-content: space-around;
             min-height: 350px;
@@ -215,97 +240,77 @@
             border: 2px solid #dee2e6;
         }
 
-        .block {
-            width: 70px;
-            height: 45px;
-            margin: 3px 0;
+        .results {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .results h3 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        .plan-step {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #4facfe;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
             border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-card h4 {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 1.8rem;
             font-weight: bold;
-            font-size: 1.2em;
-            color: white;
-            cursor: grab;
-            transition: all 0.3s ease;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
-            border: 2px solid rgba(255,255,255,0.3);
-        }
-
-        .block:hover {
-            transform: translateY(-5px) scale(1.08);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-        }
-
-        .block.dragging {
-            opacity: 0.8;
-            transform: rotate(8deg) scale(1.15);
-            z-index: 1000;
-            cursor: grabbing;
-        }
-
-        .block.block-A { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
-        .block.block-B { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
-        .block.block-C { background: linear-gradient(135deg, #ffe66d, #ff6b35); }
-        .block.block-D { background: linear-gradient(135deg, #51cf66, #40c057); }
-
-        .controls {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .btn {
-            padding: 15px 30px;
-            border: none;
-            border-radius: 30px;
-            font-size: 1.1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #ffeaa7, #fab1a0);
-            color: #2d3436;
-        }
-
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 25px rgba(0,0,0,0.3);
-        }
-
-        .btn:disabled {
-            background: #6c757d;
-            cursor: not-allowed;
-            transform: none;
+            color: #495057;
         }
 
         .loading {
-            display: none;
             text-align: center;
             padding: 40px;
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-            border-radius: 15px;
-            margin: 20px 0;
         }
 
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #2196f3;
-            border-radius: 50%;
             width: 50px;
             height: 50px;
+            border: 5px solid #e9ecef;
+            border-top: 5px solid #4facfe;
+            border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
@@ -315,272 +320,133 @@
             100% { transform: rotate(360deg); }
         }
 
-        .results {
-            background: linear-gradient(135deg, #e7f3ff, #cce7ff);
-            border: 3px solid #007bff;
-            border-radius: 20px;
-            padding: 25px;
-            margin-top: 25px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-        }
-
-        .results h3 {
-            color: #007bff;
-            margin-bottom: 20px;
-            font-size: 1.5em;
-        }
-
-        .algorithm-results {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-
-        .algorithm-card {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            border: 2px solid #e9ecef;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .algorithm-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-        }
-
-        .algorithm-card.best {
-            border-color: #28a745;
-            background: linear-gradient(135deg, #d4edda, #c3e6cb);
-        }
-
-        .algorithm-card.best::before {
-            content: "🏆 OTTIMALE";
-            position: absolute;
-            top: -10px;
-            right: 10px;
-            background: #28a745;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 15px;
-            font-size: 0.8em;
-            font-weight: bold;
-        }
-
-        .algorithm-card h4 {
-            color: #495057;
-            margin-bottom: 15px;
-            font-size: 1.2em;
-        }
-
-        .algorithm-stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .stat {
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #007bff;
-        }
-
-        .stat-label {
-            font-size: 0.8em;
-            color: #666;
-        }
-
-        .moves-section {
-            background: white;
-            border-radius: 10px;
+        .error {
+            background: #f8d7da;
+            color: #721c24;
             padding: 15px;
-            max-height: 150px;
-            overflow-y: auto;
-        }
-
-        .moves-section h5 {
-            color: #495057;
-            margin-bottom: 10px;
-            font-size: 1em;
-        }
-
-        .move-item {
-            background: #e7f3ff;
-            padding: 6px 10px;
-            margin: 4px 0;
-            border-radius: 5px;
-            border-left: 3px solid #007bff;
-            font-size: 0.85em;
-        }
-
-        .instructions {
-            background: linear-gradient(135deg, #fff3cd, #ffeeba);
-            border: 2px solid #ffc107;
-            border-radius: 15px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .instructions h4 {
-            color: #856404;
-            margin-bottom: 15px;
-        }
-
-        .instructions p {
-            margin: 8px 0;
-            color: #856404;
+            border-radius: 8px;
+            margin: 10px 0;
         }
 
         @media (max-width: 768px) {
-            .game-area {
+            .workspace {
                 grid-template-columns: 1fr;
-                gap: 25px;
             }
             
-            .algorithm-results {
-                grid-template-columns: 1fr;
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .stacks-area {
+                flex-wrap: wrap;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="app-header">
-            <h1>🧩 Planning with SAT - Blocks World</h1>
-            <p>🎓 <strong>Trasforma problemi di planning in clausole SAT</strong></p>
-            <p>✅ Trova il piano di lunghezza minima k per raggiungere l'obiettivo</p>
+        <div class="header">
+            <h1>🧠 SAT Planning Solver</h1>
+            <p>Blocks World Planning with Satisfiability Solving</p>
         </div>
-        
-        <!-- 
-        <div class="api-config">
-            <h3>🔗 Configurazione Server Python</h3>
-            <div class="api-input-group">
-                <label>API URL:</label>
-                <input type="text" id="api-url" value="http://localhost:8000" placeholder="http://localhost:8000">
-                <button onclick="testConnection()">🔗 Test</button>
+
+        <div class="main-content">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="maxSteps">Max Steps (k):</label>
+                    <input type="number" id="maxSteps" min="1" max="20" value="8">
+                </div>
+                
+                <div class="control-group">
+                    <label for="numBlocks">Number of Blocks:</label>
+                    <select id="numBlocks">
+                        <option value="3">3 Blocks</option>
+                        <option value="4" selected>4 Blocks</option>
+                        <option value="5">5 Blocks</option>
+                        <option value="6">6 Blocks</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-secondary" onclick="resetStates()">🔄 Reset</button>
+                <button class="btn btn-success" onclick="solvePlan()">🚀 Solve Plan</button>
             </div>
-            <div id="connection-status" class="connection-status disconnected">
-                <div class="connection-dot red"></div>
-                <span>Disconnesso - Avvia il server Python o cambia URL</span>
-            </div>
-        </div>
-        -->
-        
-        <div class="game-area">
-            <div class="state-section initial">
-                <h2>🏁 Stato Iniziale s₀ (Modificabile)</h2>
-                <div class="stacks-container" id="initial-stacks">
-                    <div class="stack" data-stack="0" data-state="initial">
-                        <div class="stack-label">Stack 0</div>
+
+            <div class="workspace">
+                <div class="state-container initial">
+                    <h3>🏁 Initial State s₀</h3>
+                    <div class="stacks-area" id="initial-stacks">
+                        <div class="stack" data-stack="0" data-state="initial">
+                            <div class="stack-label">Stack 0</div>
+                        </div>
+                        <div class="stack" data-stack="1" data-state="initial">
+                            <div class="stack-label">Stack 1</div>
+                        </div>
+                        <div class="stack" data-stack="2" data-state="initial">
+                            <div class="stack-label">Stack 2</div>
+                        </div>
                     </div>
-                    <div class="stack" data-stack="1" data-state="initial">
-                        <div class="stack-label">Stack 1</div>
-                    </div>
-                    <div class="stack" data-stack="2" data-state="initial">
-                        <div class="stack-label">Stack 2</div>
+                </div>
+
+                <div class="state-container goal">
+                    <h3>🎯 Goal State g (Modificabile)</h3>
+                    <div class="stacks-area" id="goal-stacks">
+                        <div class="stack" data-stack="0" data-state="goal">
+                            <div class="stack-label">Stack 0</div>
+                        </div>
+                        <div class="stack" data-stack="1" data-state="goal">
+                            <div class="stack-label">Stack 1</div>
+                        </div>
+                        <div class="stack" data-stack="2" data-state="goal">
+                            <div class="stack-label">Stack 2</div>
+                        </div>
                     </div>
                 </div>
             </div>
-            
-            <div class="state-section goal">
-                <h2>🎯 Stato Obiettivo g (Modificabile)</h2>
-                <div class="stacks-container" id="goal-stacks">
-                    <div class="stack" data-stack="0" data-state="goal">
-                        <div class="stack-label">Stack 0</div>
-                    </div>
-                    <div class="stack" data-stack="1" data-state="goal">
-                        <div class="stack-label">Stack 1</div>
-                    </div>
-                    <div class="stack" data-stack="2" data-state="goal">
-                        <div class="stack-label">Stack 2</div>
-                    </div>
-                </div>
+
+            <div class="results" id="results">
+                <h3>📊 Planning Results</h3>
+                <div id="planSteps"></div>
+                <div class="stats" id="statsContainer"></div>
             </div>
-        </div>
-        
-        <div class="controls">
-            <button class="btn btn-secondary" onclick="resetToDefault()">🔄 Reset Default</button>
-            <button class="btn btn-primary" id="solve-btn" onclick="solveWithPython()">🧠 Risolvi</button>
-        </div>
-        
-        <div id="loading" class="loading">
-            <div class="spinner"></div>
-            <p><strong>Risolvendo con Planning SAT...</strong></p>
-            <p>Sto provando k crescente per trovare il piano più corto...</p>
-        </div>
-        
-        <div id="results"></div>
-        
-        <div class="instructions">
-            <h4>📖 Come funziona Planning with SAT:</h4>
-            <p><strong>1.</strong> Trascina i blocchi per configurare lo <strong>stato iniziale s₀</strong> e l'<strong>obiettivo g</strong></p>
-            <p><strong>2.</strong> L'algoritmo trasforma il problema in clausole SAT per k = 1, 2, 3, ...</p>
-            <p><strong>3.</strong> Il primo k per cui il problema SAT è soddisfacibile dà il piano ottimo</p>
-            <p><strong>4.</strong> Le clausole codificano: stato iniziale, azioni, assiomi di frame, stato goal</p>
-            <p><strong>5.</strong> 🎁 <strong>Dominio:</strong> pickup(X), putdown(X), stack(X,Y), unstack(X,Y)</p>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>🤖 Computing optimal plan with SAT solver...</p>
+            </div>
+
+            <div class="error" id="error" style="display: none;"></div>
         </div>
     </div>
 
     <script>
-        // Stati del gioco
+        // Global state - exactly like your original
         let gameState = {
             initial: [['B', 'A'], ['C'], ['D']],
-            goal: [['A'], ['B', 'C'], ['D']]
+            goal: [['C','A'], [], ['B','D']]
         };
 
         let draggedElement = null;
         let draggedFromStack = null;
         let draggedFromState = null;
-        let currentApiUrl = 'http://localhost:8000';
 
-        function initializeGame() {
+        function initializeInterface() {
             renderState('initial', gameState.initial);
             renderState('goal', gameState.goal);
-            // testConnection(); // Commentato perché la sezione API è nascosta
-        }
-
-        async function testConnection() {
-            // Funzione per test connessione quando la sezione API è abilitata
-            const apiUrl = document.getElementById('api-url')?.value || currentApiUrl;
-            currentApiUrl = apiUrl;
-            
-            try {
-                const response = await fetch(`${apiUrl}/health`, {
-                    method: 'GET',
-                    signal: AbortSignal.timeout(3000)
-                });
-                
-                if (response.ok) {
-                    console.log(`Connesso a ${apiUrl} ✅`);
-                } else {
-                    throw new Error('Server risponde ma con errore');
-                }
-            } catch (error) {
-                console.log(`Disconnesso da ${apiUrl} - ${error.message}`);
-            }
+            setupEventListeners();
         }
 
         function renderState(stateType, state) {
             const container = document.getElementById(`${stateType}-stacks`);
             const stacks = container.querySelectorAll('.stack');
             
-            // Pulisci le stack
+            // Clear all stacks
             stacks.forEach(stack => {
                 const blocks = stack.querySelectorAll('.block');
                 blocks.forEach(block => block.remove());
             });
             
-            // Aggiungi i blocchi
+            // Add blocks to stacks
             state.forEach((stack, stackIndex) => {
                 const stackElement = stacks[stackIndex];
                 stack.forEach(blockName => {
@@ -592,7 +458,7 @@
 
         function createBlock(name, stateType) {
             const block = document.createElement('div');
-            block.className = `block block-${name}`;
+            block.className = 'block';
             block.textContent = name;
             block.dataset.block = name;
             block.dataset.state = stateType;
@@ -610,7 +476,7 @@
             draggedFromState = e.target.parentElement.dataset.state;
             e.target.classList.add('dragging');
             
-            // Abilita drop zone per tutti gli stack di entrambi gli stati
+            // Enable drop zones for all stacks
             const allStacks = document.querySelectorAll('.stack');
             allStacks.forEach(stack => {
                 stack.addEventListener('dragover', handleDragOver);
@@ -623,7 +489,7 @@
         function handleDragEnd(e) {
             e.target.classList.remove('dragging');
             
-            // Rimuovi event listeners
+            // Remove event listeners
             const allStacks = document.querySelectorAll('.stack');
             allStacks.forEach(stack => {
                 stack.removeEventListener('dragover', handleDragOver);
@@ -663,249 +529,184 @@
             
             const targetStackIndex = parseInt(targetStack.dataset.stack);
             const targetState = targetStack.dataset.state;
-            
             const blockName = draggedElement.dataset.block;
             
-            // Rimuovi il blocco dalla posizione originale
+            // Remove block from original position
             gameState[draggedFromState][draggedFromStack] = 
                 gameState[draggedFromState][draggedFromStack].filter(b => b !== blockName);
             
-            // Aggiungi alla nuova posizione
+            // Add to new position
             gameState[targetState][targetStackIndex].push(blockName);
             
-            // Aggiorna la visualizzazione
+            // Update visualization
             renderState('initial', gameState.initial);
             renderState('goal', gameState.goal);
             
             targetStack.classList.remove('drag-over');
         }
 
-        function resetToDefault() {
+        function setupEventListeners() {
+            document.getElementById('numBlocks').addEventListener('change', function() {
+                currentNumBlocks = parseInt(this.value);
+                resetStates();
+            });
+        }
+
+        function resetStates() {
+            // Reset to default configuration
             gameState = {
                 initial: [['B', 'A'], ['C'], ['D']],
-                goal: [['A'], ['B', 'C'], ['D']]
+                goal: [['C','A'], [], ['B','D']]
             };
             
             renderState('initial', gameState.initial);
             renderState('goal', gameState.goal);
-            clearResults();
+            
+            // Hide results
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('error').style.display = 'none';
         }
 
-        async function solveWithPython() {
-            const solveBtn = document.getElementById('solve-btn');
-            const loading = document.getElementById('loading');
-            const resultsDiv = document.getElementById('results');
+        function getStateFromStacks(stateType) {
+            return gameState[stateType];
+        }
+
+        async function solvePlan() {
+            // Get current states
+            const initialState = gameState.initial.filter(stack => stack.length > 0);
+            const goalState = gameState.goal.filter(stack => stack.length > 0);
+            const maxSteps = parseInt(document.getElementById('maxSteps').value);
+            
+            // Validate input
+            const initialBlocks = initialState.flat();
+            const goalBlocks = goalState.flat();
+            
+            if (initialBlocks.length === 0 || goalBlocks.length === 0) {
+                showError('Please place blocks in both initial and goal states');
+                return;
+            }
+            
+            if (initialBlocks.length !== goalBlocks.length) {
+                showError('Initial and goal states must have the same blocks');
+                return;
+            }
+            
+            // Check if states are different
+            if (JSON.stringify(gameState.initial) === JSON.stringify(gameState.goal)) {
+                showError('Initial and goal states are identical - no planning needed!');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').classList.remove('show');
+            document.getElementById('error').style.display = 'none';
             
             try {
-                // Mostra loading
-                solveBtn.disabled = true;
-                solveBtn.textContent = '⏳ Trovando piano ottimo...';
-                loading.style.display = 'block';
-                resultsDiv.innerHTML = '';
-                
-                console.log('Inviando richiesta di planning a:', currentApiUrl);
-                console.log('Stati:', { initial: gameState.initial, goal: gameState.goal });
-                
-                // Chiama il server Python
-                const response = await fetch(`${currentApiUrl}/solve`, {
+                const response = await fetch('/solve', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         initial_state: gameState.initial,
-                        goal_state: gameState.goal
+                        goal_state: gameState.goal,
+                        max_steps: maxSteps
                     })
                 });
                 
-                if (!response.ok) {
-                    throw new Error(`Errore server: ${response.status} ${response.statusText}`);
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayResults(result);
+                } else {
+                    showError(result.error || 'Server error occurred');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function displayResults(result) {
+            const resultsDiv = document.getElementById('results');
+            const planStepsDiv = document.getElementById('planSteps');
+            const statsDiv = document.getElementById('statsContainer');
+            
+            // Clear previous results
+            planStepsDiv.innerHTML = '';
+            statsDiv.innerHTML = '';
+            
+            if (result.success) {
+                // Display plan steps
+                if (result.optimal_plan && result.optimal_plan.length > 0) {
+                    result.optimal_plan.forEach((step, index) => {
+                        const stepDiv = document.createElement('div');
+                        stepDiv.className = 'plan-step';
+                        stepDiv.innerHTML = `
+                            <strong>Step ${step.step}:</strong> ${step.action}
+                            <div style="color: #6c757d; font-size: 0.9rem; margin-top: 5px;">
+                                ${step.description}
+                            </div>
+                        `;
+                        planStepsDiv.appendChild(stepDiv);
+                    });
+                } else {
+                    planStepsDiv.innerHTML = '<div class="plan-step">✅ Goal already achieved - no actions needed!</div>';
                 }
                 
-                const data = await response.json();
-                console.log('Risposta ricevuta:', data);
+                // Display statistics
+                const stats = [
+                    { label: 'Optimal Steps', value: result.optimal_steps || 0 },
+                    { label: 'Total Time', value: `${(result.total_time || 0).toFixed(3)}s` },
+                    { label: 'Propositions', value: result.domain_info?.propositions || 0 },
+                    { label: 'Actions', value: result.domain_info?.actions || 0 },
+                ];
                 
-                // Nascondi loading
-                loading.style.display = 'none';
+                if (result.attempts && result.attempts.length > 0) {
+                    const lastAttempt = result.attempts[result.attempts.length - 1];
+                    stats.push(
+                        { label: 'SAT Clauses', value: lastAttempt.clauses || 0 },
+                        { label: 'SAT Variables', value: lastAttempt.variables || 0 }
+                    );
+                }
                 
-                // Mostra risultati
-                displayResults(data);
-                
-            } catch (error) {
-                console.error('Errore:', error);
-                loading.style.display = 'none';
-                
-                alert(`❌ Errore di connessione al server Python:
-                
-${error.message}
-
-🔧 SOLUZIONI:
-1. Verifica che il server Python sia avviato con: python planning_sat_solver.py
-2. Controlla che sia sulla porta 8000
-3. Verifica che non ci siano problemi CORS
-4. Prova a riavviare il server Python
-
-Server configurato: ${currentApiUrl}`);
-            } finally {
-                solveBtn.disabled = false;
-                solveBtn.textContent = '🧠 Trova Piano Ottimo (k minimo)';
-            }
-        }
-
-        function displayResults(data) {
-            const resultsDiv = document.getElementById('results');
-            
-            if (!data.success) {
-                resultsDiv.innerHTML = `
-                    <div class="results">
-                        <h3>❌ Planning SAT - Nessuna Soluzione Trovata</h3>
-                        <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                            <strong>Risultato:</strong> ${data.message}<br>
-                            <strong>Tempo totale:</strong> ${data.total_time.toFixed(3)}s<br>
-                            <strong>Tentativi:</strong> k da 1 a ${data.attempts.length}
-                        </div>
-                        
-                        <h4>📊 Tentativi SAT per ogni k:</h4>
-                        <div class="algorithm-results">
-                `;
-                
-                data.attempts.forEach((attempt, index) => {
-                    const k = index + 1;
-                    resultsDiv.innerHTML += `
-                        <div class="algorithm-card">
-                            <h4>k = ${k} step${k > 1 ? 's' : ''}</h4>
-                            <div class="algorithm-stats">
-                                <div class="stat">
-                                    <div class="stat-value">${attempt.satisfiable ? 'SAT ✅' : 'UNSAT ❌'}</div>
-                                    <div class="stat-label">Risultato</div>
-                                </div>
-                                <div class="stat">
-                                    <div class="stat-value">${attempt.clauses || 0}</div>
-                                    <div class="stat-label">Clausole</div>
-                                </div>
-                                <div class="stat">
-                                    <div class="stat-value">${attempt.time.toFixed(3)}s</div>
-                                    <div class="stat-label">Tempo</div>
-                                </div>
-                                <div class="stat">
-                                    <div class="stat-value">${attempt.variables || 0}</div>
-                                    <div class="stat-label">Variabili</div>
-                                </div>
-                            </div>
-                        </div>
+                stats.forEach(stat => {
+                    const statCard = document.createElement('div');
+                    statCard.className = 'stat-card';
+                    statCard.innerHTML = `
+                        <h4>${stat.label}</h4>
+                        <div class="value">${stat.value}</div>
                     `;
+                    statsDiv.appendChild(statCard);
                 });
                 
-                resultsDiv.innerHTML += `
-                        </div>
-                        <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #f0f8ff, #e6f3ff); border-radius: 10px; border-left: 5px solid #007bff;">
-                            <strong>🔬 Dominio di Planning:</strong><br>
-                            • <strong>Blocchi:</strong> ${data.domain_info.blocks.join(', ')}<br>
-                            • <strong>Proposizioni:</strong> ${data.domain_info.propositions}<br>
-                            • <strong>Azioni:</strong> ${data.domain_info.actions}
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-            
-            // Caso di successo
-            let html = `
-                <div class="results">
-                    <h3>✅ Planning SAT - Piano Ottimo Trovato!</h3>
-                    
-                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                        <strong>🏆 Piano ottimo trovato con k = ${data.optimal_steps} step${data.optimal_steps > 1 ? 's' : ''}!</strong><br>
-                        <strong>⏱️ Tempo totale:</strong> ${data.total_time.toFixed(3)}s<br>
-                        <strong>🔍 Tentativi necessari:</strong> ${data.attempts.length} (k da 1 a ${data.optimal_steps})
-                    </div>
-                    
-                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #28a745;">
-                        <h4>📋 Piano Ottimo (k = ${data.optimal_steps}):</h4>
-            `;
-            
-            if (data.optimal_plan.length === 0) {
-                html += '<div style="text-align: center; color: #28a745; font-weight: bold; padding: 20px;">Nessuna azione necessaria - stati già identici!</div>';
             } else {
-                data.optimal_plan.forEach((action) => {
-                    html += `
-                        <div style="background: #e7f3ff; padding: 10px 15px; margin: 8px 0; border-radius: 8px; border-left: 4px solid #007bff;">
-                            <strong>Step ${action.step}:</strong> ${action.action}
-                        </div>
-                    `;
-                });
-            }
-            
-            html += `
-                    </div>
-                    
-                    <h4>📊 Analisi SAT per ogni k tentato:</h4>
-                    <div class="algorithm-results">
-            `;
-            
-            data.attempts.forEach((attempt, index) => {
-                const k = index + 1;
-                const isBest = attempt.satisfiable;
-                html += `
-                    <div class="algorithm-card ${isBest ? 'best' : ''}">
-                        <h4>k = ${k} step${k > 1 ? 's' : ''}</h4>
-                        <div class="algorithm-stats">
-                            <div class="stat">
-                                <div class="stat-value">${attempt.satisfiable ? 'SAT ✅' : 'UNSAT ❌'}</div>
-                                <div class="stat-label">Risultato</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-value">${attempt.clauses || 0}</div>
-                                <div class="stat-label">Clausole</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-value">${attempt.variables || 0}</div>
-                                <div class="stat-label">Variabili</div>
-                            </div>
-                            <div class="stat">
-                                <div class="stat-value">${attempt.time.toFixed(3)}s</div>
-                                <div class="stat-label">Tempo</div>
-                            </div>
-                        </div>
-                        
-                        ${attempt.satisfiable ? `
-                            <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                                <strong>✅ Piano trovato!</strong> Questo è il k minimo (piano ottimo).
-                            </div>
-                        ` : `
-                            <div style="background: #f8d7da; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                                ❌ Nessun piano possibile in ${k} step${k > 1 ? 's' : ''}
-                            </div>
-                        `}
+                planStepsDiv.innerHTML = `
+                    <div class="plan-step" style="border-left-color: #dc3545;">
+                        ❌ <strong>No solution found</strong><br>
+                        ${result.message || 'Unable to find a plan within the specified constraints'}
                     </div>
                 `;
-            });
+            }
             
-            html += `
-                    </div>
-                    
-                    <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #f0f8ff, #e6f3ff); border-radius: 10px; border-left: 5px solid #007bff;">
-                        <strong>🔬 Planning con SAT - Dettagli Tecnici:</strong><br>
-                        • <strong>Dominio:</strong> ${data.domain_info.blocks.join(', ')} (${data.domain_info.propositions} proposizioni, ${data.domain_info.actions} azioni)<br>
-                        • <strong>Metodo:</strong> Codifica SAT incrementale (k = 1, 2, 3, ...)<br>
-                        • <strong>Ottimalità:</strong> Il primo k per cui SAT è soddisfacibile dà il piano più corto<br>
-                        • <strong>Clausole:</strong> Stato iniziale + Azioni + Frame axioms + Stato goal
-                    </div>
-                </div>
-            `;
-            
-            resultsDiv.innerHTML = html;
+            resultsDiv.classList.add('show');
         }
 
-        function clearResults() {
-            document.getElementById('results').innerHTML = '';
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = '❌ ' + message;
+            errorDiv.style.display = 'block';
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
         }
 
-        // Inizializza al caricamento
-        document.addEventListener('DOMContentLoaded', initializeGame);
-        
-        // Test connessione periodico (opzionale quando API config è abilitata)
-        // setInterval(testConnection, 30000);
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeInterface);
     </script>
 </body>
 </html>
