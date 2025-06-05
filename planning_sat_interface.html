@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAX-SAT Blocks Puzzle - Portable</title>
+    <title>Planning with SAT - Blocks World</title>
     <style>
         * {
             margin: 0;
@@ -357,7 +357,7 @@
         }
 
         .algorithm-card.best::before {
-            content: "🏆 MIGLIORE";
+            content: "🏆 OTTIMALE";
             position: absolute;
             top: -10px;
             right: 10px;
@@ -456,10 +456,12 @@
 <body>
     <div class="container">
         <div class="app-header">
-            <h1>🧩 MAX-SAT Blocks Puzzle</h1>
+            <h1>🧩 Planning with SAT - Blocks World</h1>
+            <p>🎓 <strong>Trasforma problemi di planning in clausole SAT</strong></p>
+            <p>✅ Trova il piano di lunghezza minima k per raggiungere l'obiettivo</p>
         </div>
         
-         <!--
+        <!-- 
         <div class="api-config">
             <h3>🔗 Configurazione Server Python</h3>
             <div class="api-input-group">
@@ -472,11 +474,11 @@
                 <span>Disconnesso - Avvia il server Python o cambia URL</span>
             </div>
         </div>
-         -->
+        -->
         
         <div class="game-area">
             <div class="state-section initial">
-                <h2>🏁 Stato Iniziale (Modificabile)</h2>
+                <h2>🏁 Stato Iniziale s₀ (Modificabile)</h2>
                 <div class="stacks-container" id="initial-stacks">
                     <div class="stack" data-stack="0" data-state="initial">
                         <div class="stack-label">Stack 0</div>
@@ -491,7 +493,7 @@
             </div>
             
             <div class="state-section goal">
-                <h2>🎯 Stato Obiettivo (Modificabile)</h2>
+                <h2>🎯 Stato Obiettivo g (Modificabile)</h2>
                 <div class="stacks-container" id="goal-stacks">
                     <div class="stack" data-stack="0" data-state="goal">
                         <div class="stack-label">Stack 0</div>
@@ -508,23 +510,24 @@
         
         <div class="controls">
             <button class="btn btn-secondary" onclick="resetToDefault()">🔄 Reset Default</button>
-            <button class="btn btn-primary" id="solve-btn" onclick="solveWithPython()">🧠 Risolvi con Python MAX-SAT</button>
+            <button class="btn btn-primary" id="solve-btn" onclick="solveWithPython()">🧠 Risolvi</button>
         </div>
         
         <div id="loading" class="loading">
             <div class="spinner"></div>
-            <p><strong>Risolvendo con algoritmi Python MAX-SAT...</strong></p>
-            <p>Server: <span id="loading-url"></span></p>
+            <p><strong>Risolvendo con Planning SAT...</strong></p>
+            <p>Sto provando k crescente per trovare il piano più corto...</p>
         </div>
         
         <div id="results"></div>
         
         <div class="instructions">
-            <h4>📖 Istruzioni:</h4>
-            <p><strong>1.</strong> Avvia il server Python: <code>python maxsat_solver.py</code></p>
-            <p><strong>2.</strong> Configura l'URL del server se necessario</p>
-            <p><strong>3.</strong> Trascina i blocchi per configurare gli stati</p>
-            <p><strong>4.</strong> Clicca "Risolvi con Python MAX-SAT" per ottenere la soluzione</p>
+            <h4>📖 Come funziona Planning with SAT:</h4>
+            <p><strong>1.</strong> Trascina i blocchi per configurare lo <strong>stato iniziale s₀</strong> e l'<strong>obiettivo g</strong></p>
+            <p><strong>2.</strong> L'algoritmo trasforma il problema in clausole SAT per k = 1, 2, 3, ...</p>
+            <p><strong>3.</strong> Il primo k per cui il problema SAT è soddisfacibile dà il piano ottimo</p>
+            <p><strong>4.</strong> Le clausole codificano: stato iniziale, azioni, assiomi di frame, stato goal</p>
+            <p><strong>5.</strong> 🎁 <strong>Dominio:</strong> pickup(X), putdown(X), stack(X,Y), unstack(X,Y)</p>
         </div>
     </div>
 
@@ -532,7 +535,7 @@
         // Stati del gioco
         let gameState = {
             initial: [['B', 'A'], ['C'], ['D']],
-            goal: [['B', 'A'], ['C'], ['D']]
+            goal: [['A'], ['B', 'C'], ['D']]
         };
 
         let draggedElement = null;
@@ -543,15 +546,12 @@
         function initializeGame() {
             renderState('initial', gameState.initial);
             renderState('goal', gameState.goal);
-            testConnection();
+            // testConnection(); // Commentato perché la sezione API è nascosta
         }
 
         async function testConnection() {
-            const apiUrl = document.getElementById('api-url').value;
-            const statusDiv = document.getElementById('connection-status');
-            const dot = statusDiv.querySelector('.connection-dot');
-            const span = statusDiv.querySelector('span');
-            
+            // Funzione per test connessione quando la sezione API è abilitata
+            const apiUrl = document.getElementById('api-url')?.value || currentApiUrl;
             currentApiUrl = apiUrl;
             
             try {
@@ -561,16 +561,12 @@
                 });
                 
                 if (response.ok) {
-                    statusDiv.className = 'connection-status connected';
-                    dot.className = 'connection-dot green';
-                    span.textContent = `Connesso a ${apiUrl} ✅`;
+                    console.log(`Connesso a ${apiUrl} ✅`);
                 } else {
                     throw new Error('Server risponde ma con errore');
                 }
             } catch (error) {
-                statusDiv.className = 'connection-status disconnected';
-                dot.className = 'connection-dot red';
-                span.textContent = `Disconnesso da ${apiUrl} - ${error.message}`;
+                console.log(`Disconnesso da ${apiUrl} - ${error.message}`);
             }
         }
 
@@ -687,7 +683,7 @@
         function resetToDefault() {
             gameState = {
                 initial: [['B', 'A'], ['C'], ['D']],
-                goal: [['B', 'A'], ['C'], ['D']]
+                goal: [['A'], ['B', 'C'], ['D']]
             };
             
             renderState('initial', gameState.initial);
@@ -698,18 +694,16 @@
         async function solveWithPython() {
             const solveBtn = document.getElementById('solve-btn');
             const loading = document.getElementById('loading');
-            const loadingUrl = document.getElementById('loading-url');
             const resultsDiv = document.getElementById('results');
             
             try {
                 // Mostra loading
                 solveBtn.disabled = true;
-                solveBtn.textContent = '⏳ Risolvendo...';
+                solveBtn.textContent = '⏳ Trovando piano ottimo...';
                 loading.style.display = 'block';
-                loadingUrl.textContent = currentApiUrl;
                 resultsDiv.innerHTML = '';
                 
-                console.log('Inviando richiesta a:', currentApiUrl);
+                console.log('Inviando richiesta di planning a:', currentApiUrl);
                 console.log('Stati:', { initial: gameState.initial, goal: gameState.goal });
                 
                 // Chiama il server Python
@@ -746,79 +740,156 @@
 ${error.message}
 
 🔧 SOLUZIONI:
-1. Verifica che il server Python sia avviato
-2. Controlla l'URL del server
+1. Verifica che il server Python sia avviato con: python planning_sat_solver.py
+2. Controlla che sia sulla porta 8000
 3. Verifica che non ci siano problemi CORS
 4. Prova a riavviare il server Python
 
 Server configurato: ${currentApiUrl}`);
             } finally {
                 solveBtn.disabled = false;
-                solveBtn.textContent = '🧠 Risolvi con Python MAX-SAT';
+                solveBtn.textContent = '🧠 Trova Piano Ottimo (k minimo)';
             }
         }
 
         function displayResults(data) {
             const resultsDiv = document.getElementById('results');
-            const results = data.results;
-            const best = data.best_algorithm;
             
+            if (!data.success) {
+                resultsDiv.innerHTML = `
+                    <div class="results">
+                        <h3>❌ Planning SAT - Nessuna Soluzione Trovata</h3>
+                        <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                            <strong>Risultato:</strong> ${data.message}<br>
+                            <strong>Tempo totale:</strong> ${data.total_time.toFixed(3)}s<br>
+                            <strong>Tentativi:</strong> k da 1 a ${data.attempts.length}
+                        </div>
+                        
+                        <h4>📊 Tentativi SAT per ogni k:</h4>
+                        <div class="algorithm-results">
+                `;
+                
+                data.attempts.forEach((attempt, index) => {
+                    const k = index + 1;
+                    resultsDiv.innerHTML += `
+                        <div class="algorithm-card">
+                            <h4>k = ${k} step${k > 1 ? 's' : ''}</h4>
+                            <div class="algorithm-stats">
+                                <div class="stat">
+                                    <div class="stat-value">${attempt.satisfiable ? 'SAT ✅' : 'UNSAT ❌'}</div>
+                                    <div class="stat-label">Risultato</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${attempt.clauses || 0}</div>
+                                    <div class="stat-label">Clausole</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${attempt.time.toFixed(3)}s</div>
+                                    <div class="stat-label">Tempo</div>
+                                </div>
+                                <div class="stat">
+                                    <div class="stat-value">${attempt.variables || 0}</div>
+                                    <div class="stat-label">Variabili</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                resultsDiv.innerHTML += `
+                        </div>
+                        <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #f0f8ff, #e6f3ff); border-radius: 10px; border-left: 5px solid #007bff;">
+                            <strong>🔬 Dominio di Planning:</strong><br>
+                            • <strong>Blocchi:</strong> ${data.domain_info.blocks.join(', ')}<br>
+                            • <strong>Proposizioni:</strong> ${data.domain_info.propositions}<br>
+                            • <strong>Azioni:</strong> ${data.domain_info.actions}
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Caso di successo
             let html = `
                 <div class="results">
-                    <h3>🧠 Risultati Algoritmi Python MAX-SAT</h3>
+                    <h3>✅ Planning SAT - Piano Ottimo Trovato!</h3>
                     
-                    <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                        <strong>🏆 Miglior algoritmo:</strong> ${results[best].name} 
-                        (${results[best].num_moves} mosse, punteggio ${results[best].score})
-                        <br>
-                        <strong>📊 Statistiche:</strong> ${data.total_clauses} clausole, tempo generazione: ${data.generation_time.toFixed(3)}s
+                    <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                        <strong>🏆 Piano ottimo trovato con k = ${data.optimal_steps} step${data.optimal_steps > 1 ? 's' : ''}!</strong><br>
+                        <strong>⏱️ Tempo totale:</strong> ${data.total_time.toFixed(3)}s<br>
+                        <strong>🔍 Tentativi necessari:</strong> ${data.attempts.length} (k da 1 a ${data.optimal_steps})
                     </div>
                     
+                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #28a745;">
+                        <h4>📋 Piano Ottimo (k = ${data.optimal_steps}):</h4>
+            `;
+            
+            if (data.optimal_plan.length === 0) {
+                html += '<div style="text-align: center; color: #28a745; font-weight: bold; padding: 20px;">Nessuna azione necessaria - stati già identici!</div>';
+            } else {
+                data.optimal_plan.forEach((action) => {
+                    html += `
+                        <div style="background: #e7f3ff; padding: 10px 15px; margin: 8px 0; border-radius: 8px; border-left: 4px solid #007bff;">
+                            <strong>Step ${action.step}:</strong> ${action.action}
+                        </div>
+                    `;
+                });
+            }
+            
+            html += `
+                    </div>
+                    
+                    <h4>📊 Analisi SAT per ogni k tentato:</h4>
                     <div class="algorithm-results">
             `;
             
-            Object.keys(results).forEach(alg => {
-                const result = results[alg];
-                const isBest = alg === best;
-                
+            data.attempts.forEach((attempt, index) => {
+                const k = index + 1;
+                const isBest = attempt.satisfiable;
                 html += `
                     <div class="algorithm-card ${isBest ? 'best' : ''}">
-                        <h4>${result.name}</h4>
+                        <h4>k = ${k} step${k > 1 ? 's' : ''}</h4>
                         <div class="algorithm-stats">
                             <div class="stat">
-                                <div class="stat-value">${result.score}</div>
-                                <div class="stat-label">Punteggio</div>
+                                <div class="stat-value">${attempt.satisfiable ? 'SAT ✅' : 'UNSAT ❌'}</div>
+                                <div class="stat-label">Risultato</div>
                             </div>
                             <div class="stat">
-                                <div class="stat-value">${result.num_moves}</div>
-                                <div class="stat-label">Mosse</div>
+                                <div class="stat-value">${attempt.clauses || 0}</div>
+                                <div class="stat-label">Clausole</div>
                             </div>
                             <div class="stat">
-                                <div class="stat-value">${result.time.toFixed(3)}s</div>
+                                <div class="stat-value">${attempt.variables || 0}</div>
+                                <div class="stat-label">Variabili</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">${attempt.time.toFixed(3)}s</div>
                                 <div class="stat-label">Tempo</div>
                             </div>
                         </div>
                         
-                        <div class="moves-section">
-                            <h5>Sequenza Mosse:</h5>
+                        ${attempt.satisfiable ? `
+                            <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                                <strong>✅ Piano trovato!</strong> Questo è il k minimo (piano ottimo).
+                            </div>
+                        ` : `
+                            <div style="background: #f8d7da; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                                ❌ Nessun piano possibile in ${k} step${k > 1 ? 's' : ''}
+                            </div>
+                        `}
+                    </div>
                 `;
-                
-                if (result.moves.length === 0) {
-                    html += '<div class="move-item">Nessuna mossa necessaria!</div>';
-                } else {
-                    result.moves.forEach(move => {
-                        html += `<div class="move-item">${move.description}</div>`;
-                    });
-                }
-                
-                html += `</div></div>`;
             });
             
             html += `
                     </div>
                     
                     <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, #f0f8ff, #e6f3ff); border-radius: 10px; border-left: 5px solid #007bff;">
-                        <strong>🔬 Powered by Python:</strong> Tutti gli algoritmi MAX-SAT sono implementati in Python e possono essere facilmente modificati nel file <code>maxsat_solver.py</code>
+                        <strong>🔬 Planning con SAT - Dettagli Tecnici:</strong><br>
+                        • <strong>Dominio:</strong> ${data.domain_info.blocks.join(', ')} (${data.domain_info.propositions} proposizioni, ${data.domain_info.actions} azioni)<br>
+                        • <strong>Metodo:</strong> Codifica SAT incrementale (k = 1, 2, 3, ...)<br>
+                        • <strong>Ottimalità:</strong> Il primo k per cui SAT è soddisfacibile dà il piano più corto<br>
+                        • <strong>Clausole:</strong> Stato iniziale + Azioni + Frame axioms + Stato goal
                     </div>
                 </div>
             `;
@@ -833,8 +904,8 @@ Server configurato: ${currentApiUrl}`);
         // Inizializza al caricamento
         document.addEventListener('DOMContentLoaded', initializeGame);
         
-        // Test connessione ogni 30 secondi
-        setInterval(testConnection, 30000);
+        // Test connessione periodico (opzionale quando API config è abilitata)
+        // setInterval(testConnection, 30000);
     </script>
 </body>
 </html>
