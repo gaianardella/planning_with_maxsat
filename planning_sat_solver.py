@@ -1,330 +1,391 @@
-# #!/usr/bin/env python3
-# """
-# Planning with SAT - Blocks World Solver
-# Trasforma il problema di planning dei blocchi in clausole SAT
-# e trova il piano di lunghezza minima k
-# """
-
+from dataclasses import dataclass
 import json
 import random
 import time
 import os
 from typing import List, Dict, Set, Tuple, Optional
-from dataclasses import dataclass
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from itertools import combinations
 from pysat.formula import CNF
 from pysat.solvers import Solver
 
-
-# Perché serve tutto questo?
-# Per rappresentare il dominio in modo proposizionale, ogni azione deve essere:
-# Una struttura con precondizioni (cosa serve per farla)
-# Effetti positivi/negativi (come cambia il mondo)
-# Queste vengono poi trasformate in clausole SAT:
-# Se move(...) è vera,
-# allora le precondizioni a t devono essere vere
-# e gli effetti devono verificarsi a t+1
-
 @dataclass
 class Action:
-    """Rappresenta un'azione nel dominio di planning"""
     name: str
-    preconditions: List[str]  # Formule che devono essere vere
-    positive_effects: List[str]  # Proposizioni che diventano vere
-    negative_effects: List[str]  # Proposizioni che diventano false
-    
-    def __str__(self):
-        return f"{self.name}(pre:{self.preconditions}, +:{self.positive_effects}, -:{self.negative_effects})"
+    preconditions: List[str]
+    positive_effects: List[str]
+    negative_effects: List[str]
 
-
-# genera tutte le proposizioni ad ogni istante t (on(x,y,t), clear(x,t))
 class PlanningDomain:
-    """Dominio di planning per il mondo dei blocchi con proposizioni temporali"""
-    
-    def __init__(self, blocks: List[str], max_steps: int):
+    def __init__(self, blocks: List[str], num_stacks: int, max_steps: int):
         self.blocks = blocks
+        self.num_stacks = num_stacks
         self.max_steps = max_steps
+        self.actions = self.generate_actions()
+        self.propositions = self.generate_propositions()
 
-        if max_steps < 2:
-            print("⚠️ max_steps troppo piccolo: nessuna azione verrà generata (serve almeno 2 passi).")
+    def generate_propositions(self) -> List[str]:
+        propositions = []
 
-        self.propositions = self._generate_propositions()
-        self.actions = self._generate_actions()
-        print(f"🧱 Domain propositions at all time steps:")
-        for prop in sorted(self.propositions):
-            print(f"   {prop}")
-        print(f"⚙️  Actions available:")
-        for action in self.actions:
-            print(f"   {action}")
-
-    
-    def _generate_propositions(self) -> List[str]:
-        """Genera tutte le proposizioni del dominio per tutti i tempi (1 a max_steps)"""
-        props = []
-        
-        # Genera proposizioni per ogni step temporale (1 a max_steps)
         for t in range(1, self.max_steps + 1):
-            # on(X, Y, t) - blocco X è sopra blocco Y al tempo t
+            for b in self.blocks:
+                for s in range(1, self.num_stacks + 1):
+                    propositions.append(f"InStack({b},{s},{t})")
+                propositions.append(f"Clear({b},{t})")
+            
             for b1 in self.blocks:
-                for b2 in self.blocks + ['Table']:  # Include Table come destinazione
+                for b2 in self.blocks:
                     if b1 != b2:
-                        props.append(f"on({b1},{b2},{t})")
-            
-            # clear(X, t) - blocco X è libero sopra al tempo t (può essere preso)
-            for block in self.blocks:
-                props.append(f"clear({block},{t})")
-        
-        return props
-    
-    
-    def _generate_actions(self) -> List[Action]:
-        """Genera tutte le azioni move(x,from,to,t) per tutti i tempi"""
-        actions = []
-        
-        # Genera azioni per ogni step temporale (1 a max_steps-1)
-        # Le azioni al tempo t portano dallo stato t allo stato t+1
-        for t in range(1, self.max_steps): # Le azioni sono al tempo t, e producono effetti al tempo t+1
-                                           # (non ha senso avere azioni all'ultimo step, perché non portano da nessuna parte)
-            # move(X, FROM, TO, t) - muovi blocco X da FROM a TO al tempo t
-            for block in self.blocks:
-                for from_pos in self.blocks + ['Table']:
-                    for to_pos in self.blocks + ['Table']:
-                        # block ≠ from_pos → non si può stare su se stessi
-                        # block ≠ to_pos → non ci si può muovere su se stessi
-                        # from_pos ≠ to_pos → il movimento deve cambiare posizione
-                        if block != from_pos and block != to_pos and from_pos != to_pos:
-                            actions.append(Action(
-                                name=f"move({block},{from_pos},{to_pos},{t})",
-                                preconditions=[
-                                    f"on({block},{from_pos},{t})",  # Il blocco deve essere su FROM
-                                    f"clear({block},{t})",          # Il blocco deve essere libero sopra
-                                    f"clear({to_pos},{t})" if to_pos != 'Table' else None  # TO deve essere libero (se non è Table)
-                                ],
-                                positive_effects=[
-                                    f"on({block},{to_pos},{t+1})",     # Il blocco è ora su TO
-                                    f"clear({from_pos},{t+1})" if from_pos != 'Table' else None  # FROM diventa libero (se non è Table)
-                                ],
-                                negative_effects=[
-                                    f"on({block},{from_pos},{t+1})",   # Il blocco non è più su FROM
-                                    f"clear({to_pos},{t+1})" if to_pos != 'Table' else None  # TO non è più libero (se non è Table)
-                                ]
-                            ))
-            
-            # Rimuovi None dalle liste
-            # Perché quando to == Table, non serve clear(Table, t) → quindi quelle proposizioni vengono inserite come None e poi eliminate per pulizia.
-            for action in actions:
-                # print("actions: ")
-                # print(action)
-                action.preconditions = [p for p in action.preconditions if p is not None]
-                action.positive_effects = [e for e in action.positive_effects if e is not None]
-                action.negative_effects = [e for e in action.negative_effects if e is not None]
-                # print("precoditions: ")
-                # print(action.preconditions)
-                # print("positive: ")
-                # print(action.positive_effects)
-                # print("negative: ")
-                # print(action.negative_effects)
+                        propositions.append(f"On({b1},{b2},{t})")
 
-        # print("actions: "+str(actions)) #tutte le azioni possbili in ogni timestamp
+        return propositions
+
+    def generate_actions(self) -> List[Action]:
+        #  Genera solo le azioni logicamente possibili, non tutte le combinazioni.
+        actions = []
+
+        for t in range(1, self.max_steps): #perchè non si fanno azioni nell'ultimo tempo
+
+            # 1. AZIONI MoveFromStackToStack: sposta blocco da uno stack vuoto a un altro stack vuoto
+            for x in self.blocks:
+                for s1 in range(1, self.num_stacks + 1):
+                    for s2 in range(1, self.num_stacks + 1):
+                        if s1 != s2:
+                            actions.append(Action(
+                                name=f"MoveFromStackToStack({x},{s1},{s2},{t})",
+                                # Precondizioni: x deve essere clear E nello stack s1 al tempo t
+                                # Move X from stack s1 to stack s2 con entrambi stack vuoti
+                                preconditions=[
+                                    f"Clear({x},{t})", 
+                                    f"InStack({x},{s1},{t})"
+                                ],
+                                positive_effects=[f"InStack({x},{s2},{t+1})"],
+                                negative_effects=[f"InStack({x},{s1},{t+1})"]
+                            ))
+
+            # MoveFromStackToBlock({x},{sx},{y},{sy},{t}), dove:
+            # x è il blocco da spostare dal suo stack sx,
+            # y è il blocco sopra cui andrà x e si trova nello stack sy
+            # t è il tempo
+            # HO DOVUTO SPECIFICARE sy PERCHè ALTRIMENTI, ESSENDO 3 STACK, MI GENERA SIA L'AZIONE
+            # PER Y NELLO STACK 2 CHE Y NELLO STACK 3 ESSENDO ENTRAMBI != 1 (STACK DI X) PERCIò BISOGNA 
+            # SPECIFICARE LO STACK DI Y
+            # 2. AZIONI MoveFromStackToBlock: sposta blocco da stack sopra un altro blocco
+            for x in self.blocks:
+                for y in self.blocks:
+                    if x != y:
+                        # Move X from stack to block Y da stack vuoto a stack con un blocco
+                        for sx in range(1, self.num_stacks + 1):  # stack dove sta x
+                            for sy in range(1, self.num_stacks + 1):  # stack dove sta y
+                                if sx != sy:  # x e y devono essere in stack diversi
+                                    actions.append(Action(
+                                        name=f"MoveFromStackToBlock({x},{sx},{y},{sy},{t})", 
+                                        preconditions=[
+                                            f"Clear({x},{t})",      
+                                            f"Clear({y},{t})",      
+                                            f"InStack({x},{sx},{t})",  
+                                            f"InStack({y},{sy},{t})"   
+                                        ],
+                                        positive_effects=[
+                                            f"On({x},{y},{t+1})",      
+                                            f"InStack({x},{sy},{t+1})" 
+                                        ],
+                                        negative_effects=[
+                                            f"InStack({x},{sx},{t+1})", 
+                                            f"Clear({y},{t+1})"         
+                                        ]
+                                    ))
+            
+            # 3. AZIONI MoveFromBlockToStack: sposta blocco da sopra un altro blocco a stack vuoto
+            for x in self.blocks:
+                for y in self.blocks:  # blocco sotto x
+                    if x != y:
+                        for sxy in range(1, self.num_stacks + 1):  # stack dove sta y (e sopra x)
+                            for s_dest in range(1, self.num_stacks + 1):  # stack destinazione
+                                if sxy != s_dest:
+                                    actions.append(Action(
+                                        name=f"MoveFromBlockToStack({x},{y},{sxy},{s_dest},{t})", 
+                                        preconditions=[
+                                            f"Clear({x},{t})",      
+                                            f"On({x},{y},{t})",     # x deve essere sopra y
+                                            f"InStack({x},{sxy},{t})", # y deve essere nello stack sx
+                                            f"InStack({y},{sxy},{t})", # y deve essere nello stack sx
+                                        ],
+                                        positive_effects=[
+                                            f"InStack({x},{s_dest},{t+1})",  # x va nello stack sy
+                                            f"Clear({y},{t+1})"          # y diventa libero
+                                        ],
+                                        negative_effects=[
+                                            f"On({x},{y},{t+1})",        # x non è più sopra y
+                                            f"InStack({x},{sxy},{t+1})"   # x non è più nello stack sx
+                                        ]
+                                    ))
+            
+            # 4. AZIONI MoveFromBlockToBlock: sposta blocco da sopra un blocco a sopra un altro blocco
+            for x in self.blocks:
+                for y in self.blocks:  # blocco sotto x (origine)
+                    for z in self.blocks:  # blocco destinazione
+                        if x != y and x != z and y != z:
+                            for sxy in range(1, self.num_stacks + 1):  # stack dove stanno x e y
+                                for sz in range(1, self.num_stacks + 1):  # stack dove sta z
+                                    if sxy != sz:  # devono essere in stack diversi
+                                        actions.append(Action(
+                                            name=f"MoveFromBlockToBlock({x},{y},{sxy},{z},{sz},{t})", 
+                                            preconditions=[
+                                                f"Clear({x},{t})",      
+                                                f"Clear({z},{t})",      
+                                                f"On({x},{y},{t})",     # x sopra y
+                                                f"InStack({x},{sxy},{t})", # y nello stack sx
+                                                f"InStack({y},{sxy},{t})", # y nello stack sx
+                                                f"InStack({z},{sz},{t})"  # z nello stack sz
+                                            ],
+                                            positive_effects=[
+                                                f"On({x},{z},{t+1})",     # x va sopra z
+                                                f"InStack({x},{sz},{t+1})", # x va nello stack di z
+                                                f"Clear({y},{t+1})"       # y diventa libero
+                                            ],
+                                            negative_effects=[
+                                                f"On({x},{y},{t+1})",     # x non è più sopra y
+                                                f"InStack({x},{sxy},{t+1})", # x non è più nello stack sx
+                                                f"Clear({z},{t+1})"       # z non è più libero
+                                            ]
+                                        ))
+
         return actions
 
 class SATPlanningSolver:
-    """Solver per Planning con SAT con proposizioni temporali esplicite"""
-    
-    def __init__(self, domain: PlanningDomain, initial_state: List[str], goal_state: List[str], max_steps: int):
+    """Solver per Planning con SAT con stack fisici e proposizioni temporali esplicite"""
+
+    def __init__(self, domain: PlanningDomain, initial_state: List[str], goal_state: List[str], max_steps: int, num_stacks: int):
         self.domain = domain
         self.initial_state = initial_state
         self.goal_state = goal_state
         self.clauses = []
-        self.max_steps = max_steps  # Limite massimo di step da provare
-            
+        self.max_steps = max_steps
+        self.num_stacks = num_stacks
+
     def encode_initial_state(self) -> List[List[str]]:
-        """Codifica lo stato iniziale sempre al tempo 1"""
+        """Codifica lo stato iniziale sempre al tempo 1, includendo stack"""
         clauses = []
-        
         print(f"📍 Encoding INITIAL STATE at time 1:")
-        
+#         InStack(X, S) si usa per indicare il blocco che sta alla base o direttamente nello stack S.
+        # Il blocco A sta sopra B, quindi:
+        # Non sta "direttamente" nello stack 1, ma su B che è nello stack 1.
+        # Quindi InStack(A,1) non è vero.
+        # La relazione On(A,B) indica che A è sopra B.
         # Proposizioni vere nello stato iniziale al tempo 1
+
+        # Raccogli le proposizioni vere
+        true_props = set()
         for prop in self.initial_state:
-            # Se la proposizione ha già il timestamp, usala così com'è
-            if ',1)' in prop:
-                prop_temporal = prop
-            else:
-                # Converti da formato base a formato temporale al tempo 1
-                prop_temporal = prop.replace(')', ',1)')
+            prop_temporal = prop.replace(')', f',1)')
             clauses.append([prop_temporal])
+            true_props.add(prop_temporal)  # ✅ Aggiungi al set
             print(f"   ✅ {prop_temporal}")
-        
-        # Proposizioni false nello stato iniziale (closed world assumption)
+
+         # Proposizioni false (closed world assumption)
         false_props = []
         for prop in self.domain.propositions:
-            if prop.endswith(',1)'):  # Solo proposizioni al tempo 1
-                # Se la proposizione ha già il timestamp, confronta direttamente
-                if prop not in self.initial_state:
-                    # Se non ha timestamp, converti per confronto
-                    base_prop = prop.replace(',1)', ')')
-                    base_prop_with_time = prop
-                    if base_prop not in [p.replace(',1)', ')') for p in self.initial_state]:
-                        clauses.append([f"-{prop}"])
-                        false_props.append(prop)
+            if prop.endswith(',1)'): # Solo proposizioni al tempo 1
+                if prop not in true_props:  # ✅ Controlla nel set
+                    false_props.append(prop)
+        
+        # Aggiungi clausole negative
+        for fprop in false_props:
+            clauses.append([f"-{fprop}"])
         
         print(f"   ❌ False propositions at time 1: {len(false_props)} total")
-        if len(false_props) <= 10:  # Mostra solo i primi 10 per non intasare
-            for fp in false_props[:10]:
-                print(f"      -{fp}")
-        print()
-        
         return clauses
-    
+
     def encode_goal_state(self, k: int) -> List[List[str]]:
-        """Codifica lo stato goal sempre al tempo k (tempo finale)"""
+        """Codifica lo stato goal sempre al tempo k, includendo stack"""
+        # appende il tempo t (in cui prova ad arrivare al goal state) ad ogni proposizione
         clauses = []
-        
         print(f"🎯 Encoding GOAL STATE at time {k}:")
-        
-        # Tutte le proposizioni del goal devono essere vere al tempo k
         for prop in self.goal_state:
-            # Converti da formato base a formato temporale al tempo k
             prop_temporal = prop.replace(')', f',{k})')
             clauses.append([prop_temporal])
             print(f"   ✅ {prop} → {prop_temporal}")
-        
         print()
         return clauses
-    
+
+    # def encode_actions(self) -> List[List[str]]:
+    #     """Codifica tutte le azioni per tutti i tempi, considerando stack"""
+    #     clauses = []
+    #     for t in range(1, self.domain.max_steps): # non al max_steps + 1 perchè nell'ultimo tempo non facciamo azioni e siamo nel goal state
+    #         actions_at_t = [action for action in self.domain.actions if action.name.endswith(f",{t})")] #vediamo solo le azioni che facciamo nell'istante in cui siamo
+    #         action_vars = [f"action_{action.name}" for action in actions_at_t]
+
+    #         print(f"\n⌛ Encoding actions at time step {t}:")
+    #         print(f"   Azioni trovate: {len(actions_at_t)}")
+    #         if len(actions_at_t) <= 10:
+    #             for a in actions_at_t:
+    #                 print(f"     - {a.name}")
+
+    #         # Per ogni azione, codifica precondizioni e effetti (temporizzati)
+    #         for action in actions_at_t:
+    #             action_var = f"action_{action.name}"
+    #             # print(f"   Codificando azione: {action.name}")
+    #             # print(f"     Precondizioni: {action.preconditions}")
+    #             # print(f"     Effetti positivi: {action.positive_effects}")
+    #             # print(f"     Effetti negativi: {action.negative_effects}")
+    #             for precond in action.preconditions:
+    #                 clauses.append([f"-{action_var}", precond])
+    #             for effect in action.positive_effects:
+    #                 clauses.append([f"-{action_var}", effect])
+    #             for effect in action.negative_effects:
+    #                 clauses.append([f"-{action_var}", f"-{effect}"])
+
+    #         # Vincolo: al massimo una azione per tempo t
+    #         for i in range(len(action_vars)):
+    #             for j in range(i + 1, len(action_vars)):
+    #                 clauses.append([f"-{action_vars[i]}", f"-{action_vars[j]}"])
+
+    #         print(f"   Vincoli mutual exclusion aggiunti per {len(action_vars)} azioni")
+
+    #         # (opzionale) Almeno una azione per tempo t, se si vuole
+    #         if action_vars:
+    #             clauses.append(action_vars)
+    #             print(f"   Vincolo: almeno una azione a tempo {t} (clausola con {len(action_vars)} variabili)")
+
+    #     print(f"\n✅ Total clauses generated for actions: {len(clauses)}")
+    #     return clauses
+
     def encode_actions(self) -> List[List[str]]:
-        """Codifica tutte le azioni per tutti i tempi"""
         clauses = []
-        
-        for action in self.domain.actions:
-            action_var = f"action_{action.name}"
-            
-            # Se l'azione è eseguita, le precondizioni devono essere vere
-            for precond in action.preconditions:
-                clauses.append([f"-{action_var}", precond])
-            
-            # Se l'azione è eseguita, gli effetti positivi sono veri
-            for effect in action.positive_effects:
-                clauses.append([f"-{action_var}", effect])
-            
-            # Se l'azione è eseguita, gli effetti negativi sono falsi
-            for effect in action.negative_effects:
-                clauses.append([f"-{action_var}", f"-{effect}"])
-        
-        # Al massimo un'azione per ogni tempo
-        for t in range(1, self.domain.max_steps): # Le azioni sono al tempo t, e producono effetti al tempo t+1
-                                           # (non ha senso avere azioni all'ultimo step, perché non portano da nessuna parte)
-            time_actions = [f"action_{action.name}" for action in self.domain.actions 
-                          if action.name.endswith(f',{t})')]
-            
-            # Vincolo: al massimo una azione per tempo t
-            for i in range(len(time_actions)):
-                for j in range(i + 1, len(time_actions)):
-                    clauses.append([f"-{time_actions[i]}", f"-{time_actions[j]}"])
-            
-            # Vincolo: almeno una azione per tempo t
-            for t in range(1, self.domain.max_steps):
-                time_actions = [f"action_{action.name}" for action in self.domain.actions
-                                if action.name.endswith(f",{t})")]
-                if time_actions:
-                    clauses.append(time_actions)  # almeno una azione deve essere vera
-        
+        for t in range(1, self.domain.max_steps):  # fino a max_steps - 1 perché all'ultimo passo non si fanno azioni
+            actions_at_t = [action for action in self.domain.actions if action.name.endswith(f",{t})")]
+            action_vars = [f"action_{action.name}" for action in actions_at_t]
+
+            print(f"\n⌛ Encoding actions at time step {t}:")
+            print(f"   Azioni trovate: {len(actions_at_t)}")
+            # if len(actions_at_t) <= 10:
+            #     for a in actions_at_t:
+            #         print(f"     - {a.name}")
+
+            for action in actions_at_t:
+                action_var = f"action_{action.name}"
+
+                # Codifica precondizioni (devono essere vere al tempo t se l'azione è attiva)
+                for precond in action.preconditions:
+                    clauses.append([f"-{action_var}", precond])
+
+                # Codifica effetti positivi al tempo t+1
+                for effect in action.positive_effects:
+                    effect_t_plus_1 = effect.replace(f",{t})", f",{t+1})")
+                    clauses.append([f"-{action_var}", effect_t_plus_1])
+
+                # Codifica effetti negativi al tempo t+1
+                for effect in action.negative_effects:
+                    effect_t_plus_1 = effect.replace(f",{t})", f",{t+1})")
+                    clauses.append([f"-{action_var}", f"-{effect_t_plus_1}"])
+
+            # Mutual exclusion: al massimo una azione attiva per tempo t
+            for i in range(len(action_vars)):
+                for j in range(i + 1, len(action_vars)):
+                    clauses.append([f"-{action_vars[i]}", f"-{action_vars[j]}"])
+
+            # (opzionale) almeno una azione per tempo t
+            # SE C'è UN PROBLEMA MAGARI è QUI
+            if action_vars:
+                clauses.append(action_vars)
+
+        print(f"\n✅ Total clauses generated for actions: {len(clauses)}")
         return clauses
-    
-    # Serve a codificare gli assiomi del frame temporale nel problema di pianificazione
-    # — una parte fondamentale per assicurarti che ciò che non cambia, rimane invariato,
-    # a meno che un'azione lo modifichi esplicitamente.
 
-    # Cosa sono gli "assiomi di frame"?
-    # Se una proposizione è vera al tempo t, e nessuna azione la cambia, allora sarà vera anche al tempo t+1 (e viceversa per le proposizioni false).
-
-    # Senza questi assiomi, il planner SAT non sa che il mondo tende a rimanere stabile nel tempo.
-
-    #     Per ogni proposizione prop al tempo t:
-    # Trova la sua versione al tempo t+1 (next_prop).
-    # Cerca se ci sono azioni al tempo t che la cambiano (tra effetti positivi o negativi).
-    # A seconda dei casi, aggiunge clausole:
-    # ✅ Se ci sono azioni che cambiano prop:
-    # Clausola 1:
-    # Se prop è vera al tempo t e nessuna azione la cambia, allora next_prop è vera.
-    # Codifica: ¬prop ∨ action1 ∨ action2 ∨ ... ∨ next_prop
-    # Clausola 2:
-    # Se prop è falsa al tempo t e nessuna azione la rende vera, allora next_prop è falsa.
-    # Codifica: prop ∨ action1 ∨ action2 ∨ ... ∨ ¬next_prop
-    # ❌ Se nessuna azione la modifica:
-    # Vuol dire che rimane invariata per forza, quindi si usano due clausole "bicondizionali":
-    # ¬prop ∨ next_prop
-    # prop ∨ ¬next_prop
-    # che insieme significano:
-    # prop ↔ next_prop
-
-    # In SAT non c'è nozione di tempo o persistenza automatica.
-    # Se non codifichi esplicitamente che certe condizioni persistono nel tempo, il solver SAT può assegnare a caso true/false a ogni proposizione per ogni t, anche se nessuna azione l'ha toccata.
-    # Senza questi frame axioms, il tuo piano può avere stati casuali e incoerenti.
     def encode_frame_axioms(self) -> List[List[str]]:
-        """Codifica gli assiomi di frame temporali"""
+        """
+        Codifica gli assiomi di frame per preservare lo stato delle proposizioni
+        che non vengono cambiate da azioni esplicite.
+        """
         clauses = []
+        
+        # Crea lista di proposizioni base (senza timestamp)
+        base_props = set()
+        for prop in self.domain.propositions:
+            if ',1)' in prop:  # Prendi solo quelle al tempo 1
+                base_prop = prop.replace(',1)', ')')
+                base_props.add(base_prop)
+        
+        print(f"🔵 Frame Axiom Clauses:")
+        print(f"   Proposizioni base trovate: {len(base_props)}")
         
         for t in range(1, self.domain.max_steps):
-            # Per ogni proposizione al tempo t
-            time_props = [prop for prop in self.domain.propositions 
-                         if prop.endswith(f',{t})')]
+            print(f"   Encoding frame axioms per tempo {t} → {t+1}")
             
-            for prop in time_props:
-                # Trova la proposizione corrispondente al tempo t+1
-                base_prop = prop.replace(f',{t})', ')')
-                next_prop = base_prop.replace(')', f',{t+1})')
+            for prop_base in base_props:
+                prop_t = f"{prop_base.replace(')', f',{t})')}"
+                prop_t_plus_1 = f"{prop_base.replace(')', f',{t+1})')}"
                 
-                # Frame axiom: se una proposizione è vera al tempo t e nessuna 
-                # azione la cambia, allora è vera al tempo t+1
+                # Trova azioni che cambiano questa proposizione
+                negative_actions = []  # Azioni che rendono la proposizione FALSE
+                positive_actions = []  # Azioni che rendono la proposizione TRUE
                 
-                # Trova azioni che cambiano questa proposizione al tempo t
-                changing_actions = []
+                # Esamina tutte le azioni al tempo t
                 for action in self.domain.actions:
                     if action.name.endswith(f',{t})'):
                         action_var = f"action_{action.name}"
-                        # Se la proposizione è negli effetti negativi
-                        if base_prop in [eff.replace(f',{t+1})', ')') for eff in action.negative_effects]:
-                            changing_actions.append(action_var)
-                        # Se la proposizione è negli effetti positivi  
-                        elif base_prop in [eff.replace(f',{t+1})', ')') for eff in action.positive_effects]:
-                            changing_actions.append(action_var)
+                        
+                        # Controlla effetti negativi (rendono la proposizione falsa)
+                        for neg_eff in action.negative_effects:
+                            # Rimuovi timestamp dall'effetto per confronto
+                            base_neg_eff = neg_eff.replace(f',{t+1})', ')')
+                            if prop_base == base_neg_eff:
+                                if action_var not in negative_actions:  # Evita duplicati
+                                    negative_actions.append(action_var)
+                                # print(f"   🟥 Azione {action_var} con effetto NEGATIVO su {prop_base} al tempo {t+1}")
+                                break  # Esci dal loop degli effetti negativi
+                        
+                        # Controlla effetti positivi (rendono la proposizione vera)
+                        for pos_eff in action.positive_effects:
+                            # Rimuovi timestamp dall'effetto per confronto
+                            base_pos_eff = pos_eff.replace(f',{t+1})', ')')
+                            if prop_base == base_pos_eff:
+                                if action_var not in positive_actions:  # Evita duplicati
+                                    positive_actions.append(action_var)
+                                # print(f"   🟩 Azione {action_var} con effetto POSITIVO su {prop_base} al tempo {t+1}")
+                                break  # Esci dal loop degli effetti positivi
                 
-                if changing_actions:
-                    # Se prop è vera al tempo t e nessuna azione la cambia,
-                    # allora è vera al tempo t+1
-                    clause = [f"-{prop}"] + changing_actions + [next_prop]
+                # Frame axiom per persistenza positiva:
+                # "Se prop è vera al tempo t E nessuna azione che la nega è attiva, 
+                #  allora prop è vera al tempo t+1"
+                if negative_actions:
+                    # ¬prop(t) ∨ action1 ∨ action2 ∨ ... ∨ prop(t+1)
+                    # [-prop_t] + [azioni_che_tolgono_prop_t] + [prop_t_plus_1]
+                    clause = [f"-{prop_t}"] + negative_actions + [prop_t_plus_1]
                     clauses.append(clause)
-                    
-                    # Se prop è falsa al tempo t e nessuna azione la rende vera,
-                    # allora è falsa al tempo t+1
-                    positive_actions = []
-                    for action in self.domain.actions:
-                        if action.name.endswith(f',{t})'):
-                            action_var = f"action_{action.name}"
-                            if base_prop in [eff.replace(f',{t+1})', ')') for eff in action.positive_effects]:
-                                positive_actions.append(action_var)
-                    
-                    if positive_actions:
-                        clause = [prop] + positive_actions + [f"-{next_prop}"]
-                        clauses.append(clause)
                 else:
-                    # Se nessuna azione cambia la proposizione, rimane invariata
-                    clauses.append([f"-{prop}", next_prop])
-                    clauses.append([prop, f"-{next_prop}"])
+                    # Nessuna azione nega prop → persiste automaticamente se vera
+                    # ¬prop(t) ∨ prop(t+1)
+                    # Se non c’e azione che toglie prop, prop(t)⟹prop(t+1)
+                    clauses.append([f"-{prop_t}", prop_t_plus_1])
+                
+                # Frame axiom per persistenza negativa:
+                # "Se prop è falsa al tempo t E nessuna azione che la rende vera è attiva,
+                #  allora prop è falsa al tempo t+1"  
+                if positive_actions:
+                    # prop(t) ∨ action1 ∨ action2 ∨ ... ∨ ¬prop(t+1)
+                    # [prop_t] + [azioni_che_mettono_prop_t] + -[prop_t_plus_1]
+                    clause = [prop_t] + positive_actions + [f"-{prop_t_plus_1}"]
+                    clauses.append(clause)
+                else:
+                    # Nessuna azione rende prop vera → persiste automaticamente se falsa
+                    # prop(t) ∨ ¬prop(t+1)
+                    # Se non c’e azione che mette prop, -prop(t)⟹-prop(t+1)
+                    clauses.append([prop_t, f"-{prop_t_plus_1}"])
+        
+        print(f"   Totale clausole frame generate: {len(clauses)}")
         
         return clauses
-    
-    # 🔁 Mappa stringhe → interi (SAT variables)
+
     def _convert_clauses_to_cnf(self, clauses: List[List[str]]) -> Tuple[CNF, Dict[str, int], Dict[int, str]]:
-        """Converte clausole simboliche in CNF numerica per PySAT"""
         var_map: Dict[str, int] = {}
         reverse_map: Dict[int, str] = {}
         counter = 1
         cnf = CNF()
 
+        # Serve per passare le clausole a un SAT solver in forma efficiente. I SAT solver lavorano con numeri interi (DIMACS format), non con stringhe.
         for clause in clauses:
             int_clause = []
             for literal in clause:
@@ -340,236 +401,169 @@ class SATPlanningSolver:
 
         return cnf, var_map, reverse_map
 
-    # Il metodo _solve_cnf_with_pysat serve a risolvere il problema di pianificazione
-    # già codificato in CNF (Clausal Normal Form) usando il risolutore SAT PySAT,
-    # e a ricostruire il piano step-by-step a partire dal modello trovato.
-
-    # cnf: le clausole SAT che hai generato (self.clauses, mappate in interi).
-    # var_map: dizionario {nome_variabile_str: numero_intero} usato per tradurre le stringhe in interi per PySAT.
-#    Prende la CNF codificata (la tua formula SAT, in forma di clausole con interi).
-
-# Passa la CNF al risolutore SAT (PySAT) per cercare un modello soddisfacente.
-
-# Se trova una soluzione:
-
-# Traduce i numeri interi (SAT variables) indietro in stringhe usando reverse_map.
-
-# Filtra solo le proposizioni vere che rappresentano azioni eseguite (action_...).
-
-# Le ordina per tempo (grazie al parsing dell'ultimo parametro t).
-
-# Restituisce un dizionario del tipo:
-
-    def _solve_cnf_with_pysat(self, cnf: CNF, var_map: Dict[str, int]) -> Optional[Dict]:
-        reverse_map = {v: k for k, v in var_map.items()} # Crea una mappa inversa {intero: stringa} per poter tornare ai nomi originali una volta ottenuto il modello SAT.
-
-        print(f"\n🔁 reverse_map keys: {list(reverse_map.keys())}")
-
-        # Lancia il risolutore SAT.
-        # Se trova un modello soddisfacente, lo estrae come lista di interi (positivi = veri, negativi = falsi).
-        with Solver(bootstrap_with=cnf) as solver: 
+    def _solve_cnf_with_pysat(self, cnf: CNF, var_map: Dict[str, int], reverse_map: Dict[int, str]) -> Optional[Dict]:
+        
+        # serve a risolvere il problema SAT codificato in CNF utilizzando la libreria PySAT e a estrarre un piano (sequenza di azioni) dalla soluzione trovata.
+        # Se trova una soluzione:
+        # Ottiene il modello vero/falso con solver.get_model(), una lista di interi dove i positivi sono letterali veri, i negativi falsi.
+        # Filtra i letterali veri (lit > 0) e che sono nella mappa reverse_map per sicurezza.
+        # Converte i numeri in stringhe tramite reverse_map.
+        # Filtra le proposizioni che iniziano con "action_", cioè quelle che rappresentano azioni.
+        # Ordina le azioni in base al tempo, estratto dall'ultimo numero nella stringa, ad esempio da "action_MoveFromStackToStack(A,1,2),3" prende 3 come passo temporale.
+        # Restituisce un dizionario con la chiave "plan" e la lista ordinata delle azioni.
+        # Se non trova soluzione, restituisce None. DA CAMBIARE, IN QUESTO CASO DOBBIAMO FARE UN WEIGHTED MAXSAT
+        
+        with Solver(bootstrap_with=cnf) as solver:
             if solver.solve():
-                print(solver)
                 model = solver.get_model()
-                print("\n🧠 SAT solver found a model:")
-                print(model)
-
-                # Traduce i numeri veri nel modello in stringhe leggibili come action_pickup(A,B,2).
                 true_literals = {
                     reverse_map[abs(lit)]
                     for lit in model if lit > 0 and abs(lit) in reverse_map
                 }
-                print(true_literals)
-                print("Model from solver:", model)
-
-                # Estrae solo le azioni vere (cioè eseguite nel piano), ordinate per tempo t.
                 plan = sorted(
                     [lit for lit in true_literals if lit.startswith("action_")],
                     key=lambda x: int(x.split(",")[-1].strip(")"))
                 )
 
-                print("✅ Piano trovato:")
-                for step in plan:
-                    print("  ", step.replace("action_", "→ "))
-                
+                print("Piano trovato:")
+                current_step = None
+                for action in plan:
+                    step = int(action.split(",")[-1].strip(")"))
+                    if step != current_step:
+                        current_step = step
+                        print(f"\nPasso {current_step}:")
+                    print(f"  {action}")
+
                 return {"plan": plan}
             else:
-                print("❌ Nessun piano trovato.")
-                return None
 
-   
-   
-   # gira su i tempi k e prova a risolvere il problema in ogni tempo t
+                print("Nessun piano trovato entro il limite di passi.")
+                # Debug: quante azioni codificate per ogni passo
+                all_actions = [atom for atom in var_map.keys() if atom.startswith("action_")]
+                for t in range(1, 2 + 1):
+                    actions_at_t = [a for a in all_actions if a.endswith(f",{t})")]
+                    print(f"Azioni codificate al passo {t}: {len(actions_at_t)}")
+                    # Se vuoi, stampa alcune azioni:
+                    for a in actions_at_t[:10]:
+                        print(f"  {a}")
+
+                return None #DA CAMBIARE, IN QUESTO CASO DOBBIAMO FARE UN WEIGHTED MAXSAT
+
     def solve_for_k_steps(self, k: int) -> Optional[Dict]:
-        """Risolve il problema di planning per esattamente k step"""
         print(f"🔍 Trying to solve with {k} steps...")
-        
-#         start_time = time.time()
-        
-        # Crea un nuovo dominio con il k appropriato
-        # Crea un nuovo dominio temporale che considera solo k step.
-        # Questo dominio conterrà:
-        # Tutte le proposizioni (es. on(A,B,t) per t in 1..k)
-        # Tutte le azioni possibili a ogni t da 1 a k-1
-        domain_k = PlanningDomain(self.domain.blocks, k)
-        self.domain = domain_k  # Aggiorna il dominio
-        
-        # Inizializza la lista di clausole CNF che verranno costruite.
-        # # Ogni clausola è una condizione logica del tipo ¬A ∨ B ∨ C, per il risolutore SAT.
+        domain_k = PlanningDomain(self.domain.blocks, self.num_stacks, k)
+        self.domain = domain_k
         self.clauses = []
+
+        # Codifica lo stato iniziale
+        initial_clauses = self.encode_initial_state()
+        # print("\n🟢 Initial State Clauses:")
+        # for clause in initial_clauses:
+        #     print(clause)
+        self.clauses.extend(initial_clauses) #GIUSTO!
+
+
+        # Codifica le azioni
+        action_clauses = self.encode_actions()
+        print("\n🟡 Action Clauses:")
+        # for clause in action_clauses:
+        #     print(clause)
+        self.clauses.extend(action_clauses) # forse giusto
+
+
+        # Codifica i frame axioms
+        # A ⇒ B è equivalente a ¬A ∨ B (per cnf) si può vedere dalle tabelle di verità
+        # ['On(C,A,1)', ..., '-On(C,A,2)']	Impedisce che qualcosa diventi vero da nulla
+        # ['-On(C,A,1)', ..., 'On(C,A,2)']	Impedisce che qualcosa diventi falso da nulla
+        frame_clauses = self.encode_frame_axioms()
+        print("\n🔵 Frame Axiom Clauses:")
+        # for clause in frame_clauses:
+        #     print(clause)
+        self.clauses.extend(frame_clauses) # dovrebbe essere giusto
+
         
-        # Codifica stato iniziale
-        self.clauses.extend(self.encode_initial_state())
-        
-        # Codifica azioni
-        self.clauses.extend(self.encode_actions())
-        
-        # Codifica frame axioms
-        self.clauses.extend(self.encode_frame_axioms())
-        
-        # Codifica stato goal
-        self.clauses.extend(self.encode_goal_state(k))
-        
+        # Codifica il goal state
+        goal_clauses = self.encode_goal_state(k)
+        print("\n🔴 Goal State Clauses:")
+        # for clause in goal_clauses:
+        #     print(clause)
+        self.clauses.extend(goal_clauses) #GIUSTO!
+
         print(f"Generated {len(self.clauses)} clauses for k={k}")
-        print(f"\n🧩 CNF clauses preview (first 10):")
-        for i, clause in enumerate(self.clauses[:10]):
-            print(f"   {i+1}: {clause}")
 
-
-        # Convertire le clausole (stringhe) in CNF numerica per PySAT.
         cnf, var_map, reverse_map = self._convert_clauses_to_cnf(self.clauses)
+        # print(cnf)
+        # print(var_map)
+        # print(reverse_map)
+        return self._solve_cnf_with_pysat(cnf, var_map, reverse_map)
 
-        solution = self._solve_cnf_with_pysat(cnf, var_map)
-
-        return solution
-
-    
     def find_shortest_plan(self) -> Dict:
-        """Trova il piano più corto incrementando k"""
-        print("🚀 Starting SAT-based planning...")
-        
-        # total_start_time = time.time()
+        print("🚀 Starting SAT-based planning with stacks...")
         results = []
 
-        # 🔒 Verifica che il valore massimo di step consenta almeno un'azione
         if self.max_steps < 2:
             return {
                 'success': False,
-                'message': 'Impossibile pianificare: max_steps deve essere almeno 2 per consentire azioni',
+                'message': 'max_steps deve essere almeno 2 per consentire azioni',
                 'domain_info': {
                     'blocks': self.domain.blocks,
                     'propositions': len(self.domain.propositions),
                     'actions': len(self.domain.actions)
                 }
             }
-            
-        # Prova k crescente fino a trovare una soluzione
+
         for k in range(2, self.max_steps + 1):
             result = self.solve_for_k_steps(k)
             results.append(result)
+            print(results)
 
-            print("k: "+str(k))
-            print("max_steps: "+str(self.max_steps))
-            print("result: "+str(result))
+            if result is None or not result.get('plan'):
+                continue
 
-            if result is None:
-                print(f"❌ Errore o insoddisfacibile per k={k}")
-                continue  # prova con il prossimo k
-            
-            if result.get('plan'):
-                print("✅ Piano trovato con", k, "passi:")
-                for step in result['plan']:
-                    print("  ", step.replace("action_", "→ "))
-#                 total_time = time.time() - total_start_time
-                return {
-                    'success': True,
-                    'optimal_plan': result['plan'],
-                    'optimal_steps': k,
-#                     'total_time': total_time,
-#                     'attempts': results,
-                    'domain_info': {
-                        'blocks': self.domain.blocks,
-                        'propositions': len(self.domain.propositions),
-                        'actions': len(self.domain.actions)
-                    }
-                }
-        
-        # Nessuna soluzione trovata entro max_steps
-#         total_time = time.time() - total_start_time
+            print(f"✅ Piano trovato con {k} passi:")
+            for step in result['plan']:
+                print("  ", step.replace("action_", "→ "))
+
+            return {
+                'success': True,
+                'optimal_plan': result['plan'],
+                'steps': k,
+                'all_results': results
+            }
+
+        print("❌ Nessun piano trovato entro il limite massimo di passi")
         return {
             'success': False,
-            'message': f'No solution found within {self.max_steps} steps',
-#             'total_time': total_time,
-#             'attempts': results,
-            'domain_info': {
-                'blocks': self.domain.blocks,
-                'propositions': len(self.domain.propositions),
-                'actions': len(self.domain.actions)
-            }
+            'message': 'Nessun piano trovato',
+            'all_results': results
         }
-
-# serve a tradurre uno stato del mondo "concreto" (come liste di stack di blocchi)
-# in proposizioni logiche, che sono le variabili booleane usate nella codifica SAT del problema
-# di planning.
-# Perché è utile?
-# Per convertire lo stato iniziale e lo stato finale (goal) in proposizioni logiche che:
-# possono essere aggiunte direttamente alla formula SAT
-# sono compatibili con le proposizioni generate dal dominio (on(X,Y,t), clear(X,t))
-
-# Trasforma uno stato state = [["A", "B"], ["C"]] in:
-# [
-#   "on(B,A)", "clear(B)", "on(A,Table)",
-#   "on(C,Table)", "clear(C)"
-# ]
-# oppure, se time=2:
-# [
-#   "on(B,A,2)", "clear(B,2)", "on(A,Table,2)",
-#   "on(C,Table,2)", "clear(C,2)"
-# ]
-
-def blocks_state_to_propositions(state: List[List[str]], time: int = None) -> List[str]:
-    """Converte lo stato dei blocchi in proposizioni logiche con timestamp opzionale"""
-    props = []
-    all_blocks = set()
-    
-    # Raccogli tutti i blocchi
-    for stack in state:
-        all_blocks.update(stack)
-    
-    # Analizza ogni stack
-    for stack_idx, stack in enumerate(state):
-        if not stack:
-            continue
-            
-        for block_idx, block in enumerate(stack):
-            # clear(X) - il blocco è libero sopra se è l'ultimo della stack
-            if block_idx == len(stack) - 1:
-                if time is not None: #time None serve per il goal
-                    props.append(f"clear({block},{time})")
-                else:
-                    props.append(f"clear({block})")
-            
-            # on(X, Table) - il blocco è sul tavolo se è il primo della stack
-            if block_idx == 0:
-                if time is not None:
-                    props.append(f"on({block},Table,{time})")
-                else:
-                    props.append(f"on({block},Table)")
-            
-            # on(X, Y) - il blocco X è sopra il blocco Y
-            if block_idx > 0:
-                below_block = stack[block_idx - 1]
-                if time is not None:
-                    props.append(f"on({block},{below_block},{time})")
-                else:
-                    props.append(f"on({block},{below_block})")
-    
-    return props
 
 # Flask Server
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
+def blocks_state_to_propositions(state: List[List[str]]) -> List[str]:
+    props = []
+    for stack_idx, stack in enumerate(state, start=1):
+        for height, block in enumerate(stack, start=1):
+            # Es: "On(A,B,t)", "InStack(A,1,t)", "OnTable(B,t)", etc.
+            # Qui non gestisco il tempo perché sarà aggiunto nel solver
+   
+            props.append(f"InStack({block},{stack_idx})")
+            if height > 1:
+                below_block = stack[height - 2]
+                props.append(f"On({block},{below_block})")
+            
+        # Trova il blocco in cima allo stack Top() e Clear()
+        if stack:  # stack non vuoto
+            top_block = stack[-1]
+            # props.append(f"Top({top_block},{stack_idx})")
+            props.append(f"Clear({top_block})")  # blocco libero, nessuno sopra
+
+
+    return props
+
+# Carica l'interfaccia
 @app.route('/')
 def index():
     try:
@@ -601,159 +595,140 @@ def index():
         </html>
         ''', 500
 
-@app.route('/health')
-def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'message': 'Planning with SAT server is running',
-        'type': 'SAT Planning',
-        'algorithms': ['SAT-based planning with incremental k'],
-        'version': '1.0'
-    })
+# @app.route('/health')
+# def health_check():
+#     return jsonify({
+#         'status': 'healthy',
+#         'message': 'Planning with SAT server is running',
+#         'type': 'SAT Planning',
+#         'algorithms': ['SAT-based planning with incremental k'],
+#         'version': '1.0'
+#     })
 
-@app.route('/solve/html', methods=['POST'])
-def solve_html():
+# @app.route('/solve/html', methods=['POST'])
+# def solve_html():
+#     try:
+#         data = request.json
+#         if not data:
+#             return "No JSON data received", 400
+        
+#         initial_state = data.get('initial_state')
+#         goal_state = data.get('goal_state')
+#         max_steps = data.get('max_steps')
+        
+#         if initial_state is None or goal_state is None or max_steps is None:
+#             return "Missing initial_state, goal_state or max_steps", 400
+        
+#         # Verifica formato e ricava num_stacks
+#         if not all(isinstance(stack, list) for stack in initial_state):
+#             return "Invalid input format: each stack in initial_state must be a list", 400
+#         if not all(isinstance(stack, list) for stack in goal_state):
+#             return "Invalid input format: each stack in goal_state must be a list", 400
+        
+#         num_stacks = len(initial_state)
+        
+#         all_blocks = set()
+#         for state in [initial_state, goal_state]:
+#             for stack in state:
+#                 all_blocks.update(stack)
+        
+#         blocks = sorted(list(all_blocks))
+        
+#         # Crea dominio PlanningDomain con num_stacks
+#         domain = PlanningDomain(blocks, max_steps, num_stacks)
+        
+#         # Converti gli stati in proposizioni con stack (usando stack index)
+#         initial_props = blocks_state_to_propositions(initial_state)  
+#         goal_props = blocks_state_to_propositions(goal_state)
+        
+#         solver = SATPlanningSolver(domain, initial_props, goal_props, max_steps, num_stacks)
+#         results = solver.find_shortest_plan()
+
+#         print("HTML")
+#         print("RESULTS: "+str(results))
+        
+#         if results['success']:
+#             import re
+#             from markupsafe import escape
+            
+#             plan_html_lines = []
+#             for step_str in results['optimal_plan']:
+#                 clean_step = step_str.replace("action_", "→ ")
+#                 match = re.search(r",(\d+)\)$", clean_step)
+#                 step_num = match.group(1) if match else "?"
+#                 plan_html_lines.append(f"<b>Step {step_num}:</b> {escape(clean_step)}")
+            
+#             plan_html = "<br>".join(plan_html_lines)
+            
+#             html = f"""
+#             <html><body>
+#             <h2>✅ Piano trovato con {results['steps']} passi</h2>
+#             <p>{plan_html}</p>
+#             </body></html>
+#             """
+#         else:
+#             html = """
+#             <html><body>
+#             <h2>❌ Nessun piano trovato</h2>
+#             </body></html>
+#             """
+        
+#         return html, 200
+        
+#     except Exception as e:
+#         from markupsafe import escape
+#         return f"Errore interno: {escape(str(e))}", 500
+
+
+@app.route('/solve', methods=['POST'])
+def solve_endpoint():
     try:
+        if not request.json:
+            return jsonify({'error': 'No JSON data received'}), 400
+        
         data = request.json
-        if not data:
-            return "No JSON data received", 400
         
         initial_state = data.get('initial_state')
         goal_state = data.get('goal_state')
         max_steps = data.get('max_steps')
         
         if initial_state is None or goal_state is None or max_steps is None:
-            return "Missing initial_state, goal_state or max_steps", 400
+            return jsonify({'error': 'Missing initial_state, goal_state or max_steps'}), 400
         
+        # Controllo formato stack
+        if not all(isinstance(stack, list) for stack in initial_state):
+            return jsonify({'error': 'Each stack in initial_state must be a list'}), 400
+        if not all(isinstance(stack, list) for stack in goal_state):
+            return jsonify({'error': 'Each stack in goal_state must be a list'}), 400
+        
+        num_stacks = len(initial_state)
+        
+        # Estrai blocchi
         all_blocks = set()
         for state in [initial_state, goal_state]:
             for stack in state:
-                if isinstance(stack, list):
-                    all_blocks.update(stack)
-                else:
-                    return "Invalid input format: each stack must be a list", 400
+                all_blocks.update(stack)
         
         blocks = sorted(list(all_blocks))
-        domain = PlanningDomain(blocks, max_steps)
+        
+        # Crea dominio PlanningDomain con num_stacks
+        domain = PlanningDomain(blocks, num_stacks, max_steps)
+
+        # Converti stati in proposizioni con stack
         initial_props = blocks_state_to_propositions(initial_state)
         goal_props = blocks_state_to_propositions(goal_state)
-        
-        solver = SATPlanningSolver(domain, initial_props, goal_props, max_steps)
+
+        # DEBUGGARE SOLVER
+        solver = SATPlanningSolver(domain, initial_props, goal_props, max_steps, num_stacks)
         results = solver.find_shortest_plan()
-
-        print("HTML")
-        print("RESULTS: "+str(results))
         
-        if results['success']:
-            import re
-            from markupsafe import escape
-            
-            plan_html_lines = []
-            for step_str in results['optimal_plan']:
-                clean_step = step_str.replace("action_", "→ ")
-                match = re.search(r",(\d+)\)$", clean_step)
-                step_num = match.group(1) if match else "?"
-                plan_html_lines.append(f"<b>Step {step_num}:</b> {escape(clean_step)}")
-            
-            plan_html = "<br>".join(plan_html_lines)
-            
-            html = f"""
-            <html><body>
-            <h2>✅ Piano trovato con {results['optimal_steps']} passi</h2>
-            <p>{plan_html}</p>
-            </body></html>
-            """
-        else:
-            html = """
-            <html><body>
-            <h2>❌ Nessun piano trovato</h2>
-            </body></html>
-            """
-        
-        return html, 200
-        
-    except Exception as e:
-        return f"Errore interno: {escape(str(e))}", 500
-
-
-@app.route('/solve', methods=['POST'])
-def solve_endpoint():
-    try:
-        # Controllo dei dati ricevuti
-        if not request.json:
-            return jsonify({'error': 'No JSON data received'}), 400
-        
-        data = request.json
-        
-#         if 'initial_state' not in data or 'goal_state' not in data:
-#             return jsonify({'error': 'Missing initial_state or goal_state'}), 400
-        
-        initial_state = data['initial_state']
-        goal_state = data['goal_state']
-        max_steps = data['max_steps']
-        
-        print(f"\n📨 Received planning request:")
-        print(f"Initial: {initial_state}")
-        print(f"Goal: {goal_state}")
-        
-#         # Validazione input
-#         if not isinstance(initial_state, list) or not isinstance(goal_state, list):
-#             return jsonify({'error': 'States must be lists of lists'}), 400
-        
-        # Estrai tutti i blocchi
-        all_blocks = set()
-        try:
-            for state in [initial_state, goal_state]:
-                for stack in state:
-                    if isinstance(stack, list):
-                        all_blocks.update(stack)
-                    else:
-                        return jsonify({'error': 'Each stack must be a list'}), 400
-        except Exception as e:
-            return jsonify({'error': f'Invalid state format: {str(e)}'}), 400
-        
-        blocks = sorted(list(all_blocks))
-        print(f"Blocks: {blocks}")
-        
-#         if not blocks:
-#             return jsonify({'error': 'No blocks found in states'}), 400
-
-        # Crea dominio di planning temporale (inizialmente con max_steps temporaneo)
-        try:
-            # initial_domain = PlanningDomain(blocks, 1)  # Temporaneo
-            initial_domain = PlanningDomain(blocks, max_steps)
-            print(f"Domain created for blocks: {blocks}")
-        except Exception as e:
-            return jsonify({'error': f'Error creating planning domain: {str(e)}'}), 500
-        
-        # Converti stati in proposizioni
-        try:
-            initial_props = blocks_state_to_propositions(initial_state)
-            goal_props = blocks_state_to_propositions(goal_state)
-            
-            print(f"Initial propositions: {initial_props}")
-            print(f"Goal propositions: {goal_props}")
-        except Exception as e:
-            return jsonify({'error': f'Error converting states to propositions: {str(e)}'}), 500
-        
-        # Risolvi con SAT Planning
-        try:
-            solver = SATPlanningSolver(initial_domain, initial_props, goal_props, max_steps)
-            results = solver.find_shortest_plan()
-            
-            print(f"\n✅ Planning result: {'SUCCESS' if results['success'] else 'FAILED'}")
-            if results['success']:
-                print(f"Optimal plan length: {results['optimal_steps']}")
-            
-            return jsonify(results)
-            
-        except Exception as e:
-            print(f"❌ Error in SAT solver: {str(e)}")
-            return jsonify({'error': f'Error in SAT planning solver: {str(e)}'}), 500
+        return jsonify(results)
             
     except Exception as e:
-        print(f"❌ Unexpected error in solve endpoint: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Unexpected server error: {str(e)}'}), 500
+
 
 if __name__ == "__main__":
     PORT = 8000

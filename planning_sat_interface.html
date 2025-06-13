@@ -126,6 +126,16 @@
             box-shadow: 0 8px 16px rgba(86, 171, 47, 0.3);
         }
 
+        .btn-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+
         .workspace {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -273,6 +283,16 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
+        .plan-step-html {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            font-family: 'Courier New', monospace;
+        }
+
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -328,6 +348,20 @@
             margin: 10px 0;
         }
 
+        .html-results {
+            background: #e8f5e8;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+            display: none;
+            border: 2px solid #28a745;
+        }
+
+        .html-results.show {
+            display: block;
+            animation: slideIn 0.5s ease;
+        }
+
         @media (max-width: 768px) {
             .workspace {
                 grid-template-columns: 1fr;
@@ -355,7 +389,7 @@
             <div class="controls">
                 <div class="control-group">
                     <label for="maxSteps">Max Steps (k):</label>
-                    <input type="number" id="maxSteps" min="1" max="20" value="8">
+                    <input type="number" id="maxSteps" min="1" max="20" value="5">
                 </div>
                 
                 <div class="control-group">
@@ -369,7 +403,11 @@
                 </div>
 
                 <button class="btn btn-secondary" onclick="resetStates()">🔄 Reset</button>
-                <button class="btn btn-success" onclick="solvePlan()">🚀 Solve Plan</button>
+                <!--<button class="btn btn-success" onclick="solvePlan()">🚀 Solve Plan (JSON)</button>-->
+                <!--<button class="btn btn-info" onclick="solvePlanHTML()">🚀 Solve Plan</button> (HTML)-->
+                <button class="btn btn-info" onclick="solvePlan()">🚀 Solve Plan</button>
+
+
             </div>
 
             <div class="workspace">
@@ -389,7 +427,7 @@
                 </div>
 
                 <div class="state-container goal">
-                    <h3>🎯 Goal State g (Modificabile)</h3>
+                    <h3>🎯 Goal State g</h3>
                     <div class="stacks-area" id="goal-stacks">
                         <div class="stack" data-stack="0" data-state="goal">
                             <div class="stack-label">Stack 0</div>
@@ -405,9 +443,14 @@
             </div>
 
             <div class="results" id="results">
-                <h3>📊 Planning Results</h3>
+                <h3>📊 Planning Results (JSON)</h3>
                 <div id="planSteps"></div>
                 <div class="stats" id="statsContainer"></div>
+            </div>
+
+            <div class="html-results" id="htmlResults">
+                <h3>🎨 Planning Results (HTML)</h3>
+                <div id="htmlPlanSteps"></div>
             </div>
 
             <div class="loading" id="loading" style="display: none;">
@@ -564,6 +607,7 @@
             
             // Hide results
             document.getElementById('results').classList.remove('show');
+            document.getElementById('htmlResults').classList.remove('show');
             document.getElementById('error').style.display = 'none';
         }
 
@@ -572,6 +616,14 @@
         }
 
         async function solvePlan() {
+            await callSolver('/solve', 'json');
+        }
+
+        async function solvePlanHTML() {
+            await callSolver('/solve/html', 'html');
+        }
+
+        async function callSolver(endpoint, responseType) {
             // Get current states
             const initialState = gameState.initial.filter(stack => stack.length > 0);
             const goalState = gameState.goal.filter(stack => stack.length > 0);
@@ -600,10 +652,11 @@
             // Show loading
             document.getElementById('loading').style.display = 'block';
             document.getElementById('results').classList.remove('show');
+            document.getElementById('htmlResults').classList.remove('show');
             document.getElementById('error').style.display = 'none';
             
             try {
-                const response = await fetch('/solve', {
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -615,12 +668,20 @@
                     })
                 });
                 
-                const result = await response.json();
-                
-                if (response.ok) {
-                    displayResults(result);
+                if (responseType === 'html') {
+                    const htmlResult = await response.text();
+                    if (response.ok) {
+                        displayHTMLResults(htmlResult);
+                    } else {
+                        showError('Server error occurred');
+                    }
                 } else {
-                    showError(result.error || 'Server error occurred');
+                    const result = await response.json();
+                    if (response.ok) {
+                        displayResults(result);
+                    } else {
+                        showError(result.error || 'Server error occurred');
+                    }
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);
@@ -692,6 +753,22 @@
             }
             
             resultsDiv.classList.add('show');
+        }
+
+        function displayHTMLResults(htmlContent) {
+            const htmlResultsDiv = document.getElementById('htmlResults');
+            const htmlPlanStepsDiv = document.getElementById('htmlPlanSteps');
+            
+            // Clear previous results
+            htmlPlanStepsDiv.innerHTML = '';
+            
+            // Create a wrapper for the HTML content
+            const wrapper = document.createElement('div');
+            wrapper.className = 'plan-step-html';
+            wrapper.innerHTML = htmlContent;
+            
+            htmlPlanStepsDiv.appendChild(wrapper);
+            htmlResultsDiv.classList.add('show');
         }
 
         function showError(message) {
