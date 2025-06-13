@@ -404,11 +404,7 @@
                 </div>
 
                 <button class="btn btn-secondary" onclick="resetStates()">🔄 Reset</button>
-                <!--<button class="btn btn-success" onclick="solvePlan()">🚀 Solve Plan (JSON)</button>-->
-                <!--<button class="btn btn-info" onclick="solvePlanHTML()">🚀 Solve Plan</button> (HTML)-->
                 <button class="btn btn-info" onclick="solvePlan()">🚀 Solve Plan</button>
-
-
             </div>
 
             <div class="workspace">
@@ -444,14 +440,9 @@
             </div>
 
             <div class="results" id="results">
-                <h3>📊 Planning Results (JSON)</h3>
+                <h3>📊 Planning Results</h3>
                 <div id="planSteps"></div>
                 <div class="stats" id="statsContainer"></div>
-            </div>
-
-            <div class="html-results" id="htmlResults">
-                <h3>🎨 Planning Results (HTML)</h3>
-                <div id="htmlPlanSteps"></div>
             </div>
 
             <div class="loading" id="loading" style="display: none;">
@@ -464,19 +455,40 @@
     </div>
 
     <script>
-        // Global state - exactly like your original
+        // Global state
+        let currentNumBlocks = 4;
         let gameState = {
-            initial: [['B', 'A'], ['C'], ['D']],
-            goal: [['C','A'], [], ['B','D']]
+            initial: [[], [], []],
+            goal: [[], [], []]
         };
 
         let draggedElement = null;
         let draggedFromStack = null;
         let draggedFromState = null;
 
+        // Configurazioni predefinite per ogni numero di blocchi
+        const defaultConfigurations = {
+            3: {
+                initial: [['B', 'A'], ['C'], []],
+                goal: [['C'], ['B'], ['A']]
+            },
+            4: {
+                initial: [['B', 'A'], ['C'], ['D']],
+                goal: [['C', 'A'], [], ['B', 'D']]
+            },
+            5: {
+                initial: [['B', 'A'], ['C'], ['E', 'D']],
+                goal: [['C', 'A'], ['E'], ['B', 'D']]
+            },
+            6: {
+                initial: [['B', 'A'], ['C'], ['F', 'E', 'D']],
+                goal: [['C', 'A'], ['F'], ['B', 'E', 'D']]
+            }
+        };
+
         function initializeInterface() {
-            renderState('initial', gameState.initial);
-            renderState('goal', gameState.goal);
+            currentNumBlocks = parseInt(document.getElementById('numBlocks').value);
+            resetStates();
             setupEventListeners();
         }
 
@@ -597,10 +609,14 @@
         }
 
         function resetStates() {
-            // Reset to default configuration
+            // Always read the current value from the select element
+            currentNumBlocks = parseInt(document.getElementById('numBlocks').value);
+            
+            // Use default configuration for the selected number of blocks
+            const config = defaultConfigurations[currentNumBlocks];
             gameState = {
-                initial: [['B', 'A'], ['C'], ['D']],
-                goal: [['C','A'], [], ['B','D']]
+                initial: config.initial.map(stack => [...stack]),
+                goal: config.goal.map(stack => [...stack])
             };
             
             renderState('initial', gameState.initial);
@@ -608,26 +624,13 @@
             
             // Hide results
             document.getElementById('results').classList.remove('show');
-            document.getElementById('htmlResults').classList.remove('show');
             document.getElementById('error').style.display = 'none';
         }
 
-        function getStateFromStacks(stateType) {
-            return gameState[stateType];
-        }
-
         async function solvePlan() {
-            await callSolver('/solve', 'json');
-        }
-
-        async function solvePlanHTML() {
-            await callSolver('/solve/html', 'html');
-        }
-
-        async function callSolver(endpoint, responseType) {
             // Get current states
-            const initialState = gameState.initial.filter(stack => stack.length > 0);
-            const goalState = gameState.goal.filter(stack => stack.length > 0);
+            const initialState = gameState.initial;
+            const goalState = gameState.goal;
             const maxSteps = parseInt(document.getElementById('maxSteps').value);
             
             // Validate input
@@ -644,6 +647,14 @@
                 return;
             }
             
+            // Check if all blocks are present in both states
+            const initialSet = new Set(initialBlocks.sort());
+            const goalSet = new Set(goalBlocks.sort());
+            if (initialSet.size !== goalSet.size || [...initialSet].some(block => !goalSet.has(block))) {
+                showError('Initial and goal states must contain exactly the same blocks');
+                return;
+            }
+            
             // Check if states are different
             if (JSON.stringify(gameState.initial) === JSON.stringify(gameState.goal)) {
                 showError('Initial and goal states are identical - no planning needed!');
@@ -653,11 +664,10 @@
             // Show loading
             document.getElementById('loading').style.display = 'block';
             document.getElementById('results').classList.remove('show');
-            document.getElementById('htmlResults').classList.remove('show');
             document.getElementById('error').style.display = 'none';
             
             try {
-                const response = await fetch(endpoint, {
+                const response = await fetch('/solve', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -669,20 +679,12 @@
                     })
                 });
                 
-                if (responseType === 'html') {
-                    const htmlResult = await response.text();
-                    if (response.ok) {
-                        displayHTMLResults(htmlResult);
-                    } else {
-                        showError('Server error occurred');
-                    }
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayResults(result);
                 } else {
-                    const result = await response.json();
-                    if (response.ok) {
-                        displayResults(result);
-                    } else {
-                        showError(result.error || 'Server error occurred');
-                    }
+                    showError(result.error || 'Server error occurred');
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);
@@ -754,22 +756,6 @@
             }
             
             resultsDiv.classList.add('show');
-        }
-
-        function displayHTMLResults(htmlContent) {
-            const htmlResultsDiv = document.getElementById('htmlResults');
-            const htmlPlanStepsDiv = document.getElementById('htmlPlanSteps');
-            
-            // Clear previous results
-            htmlPlanStepsDiv.innerHTML = '';
-            
-            // Create a wrapper for the HTML content
-            const wrapper = document.createElement('div');
-            wrapper.className = 'plan-step-html';
-            wrapper.innerHTML = htmlContent;
-            
-            htmlPlanStepsDiv.appendChild(wrapper);
-            htmlResultsDiv.classList.add('show');
         }
 
         function showError(message) {
