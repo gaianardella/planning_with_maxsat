@@ -38,6 +38,11 @@ class PlanningDomain:
                 for b2 in self.blocks:
                     if b1 != b2:
                         propositions.append(f"On({b1},{b2},{t})")
+            
+            # Aggiungi le proposizioni EmptyStack
+            for s in range(1, self.num_stacks + 1):
+                propositions.append(f"EmptyStack({s},{t})")
+
 
         return propositions
 
@@ -53,14 +58,15 @@ class PlanningDomain:
                     for s2 in range(1, self.num_stacks + 1):
                         if s1 != s2:
                             actions.append(Action(
-                                name=f"MoveFromStackToStack({x},{s1},{s2},{t})",
+                                name=f"MoveFromStackToEmptyStack({x},{s1},{s2},{t})",
                                 # Precondizioni: x deve essere clear E nello stack s1 al tempo t
                                 # Move X from stack s1 to stack s2 con entrambi stack vuoti
                                 preconditions=[
                                     f"Clear({x},{t})", 
-                                    f"InStack({x},{s1},{t})"
+                                    f"InStack({x},{s1},{t})",
+                                    f"EmptyStack({s2},{t})"
                                 ],
-                                positive_effects=[f"InStack({x},{s2},{t+1})"],
+                                positive_effects=[f"InStack({x},{s2},{t+1})", f"EmptyStack({s1},{t+1})"],
                                 negative_effects=[f"InStack({x},{s1},{t+1})"]
                             ))
 
@@ -89,7 +95,8 @@ class PlanningDomain:
                                         ],
                                         positive_effects=[
                                             f"On({x},{y},{t+1})",      
-                                            f"InStack({x},{sy},{t+1})" 
+                                            f"InStack({x},{sy},{t+1})",
+                                            f"EmptyStack({sx},{t+1})"
                                         ],
                                         negative_effects=[
                                             f"InStack({x},{sx},{t+1})", 
@@ -105,12 +112,13 @@ class PlanningDomain:
                             for s_dest in range(1, self.num_stacks + 1):  # stack destinazione
                                 if sxy != s_dest:
                                     actions.append(Action(
-                                        name=f"MoveFromBlockToStack({x},{y},{sxy},{s_dest},{t})", 
+                                        name=f"MoveFromBlockToEmptyStack({x},{y},{sxy},{s_dest},{t})", 
                                         preconditions=[
                                             f"Clear({x},{t})",      
                                             f"On({x},{y},{t})",     # x deve essere sopra y
                                             f"InStack({x},{sxy},{t})", # y deve essere nello stack sx
                                             f"InStack({y},{sxy},{t})", # y deve essere nello stack sx
+                                            f"EmptyStack({s_dest},{t})"
                                         ],
                                         positive_effects=[
                                             f"InStack({x},{s_dest},{t+1})",  # x va nello stack sy
@@ -118,9 +126,11 @@ class PlanningDomain:
                                         ],
                                         negative_effects=[
                                             f"On({x},{y},{t+1})",        # x non è più sopra y
-                                            f"InStack({x},{sxy},{t+1})"   # x non è più nello stack sx
+                                            f"InStack({x},{sxy},{t+1})",   # x non è più nello stack sx
+                                            f"EmptyStack({s_dest},{t+1})"
                                         ]
                                     ))
+
             
             # 4. AZIONI MoveFromBlockToBlock: sposta blocco da sopra un blocco a sopra un altro blocco
             for x in self.blocks:
@@ -209,49 +219,7 @@ class SATPlanningSolver:
             print(f"   ✅ {prop} → {prop_temporal}")
         print()
         return clauses
-
-    # def encode_actions(self) -> List[List[str]]:
-    #     """Codifica tutte le azioni per tutti i tempi, considerando stack"""
-    #     clauses = []
-    #     for t in range(1, self.domain.max_steps): # non al max_steps + 1 perchè nell'ultimo tempo non facciamo azioni e siamo nel goal state
-    #         actions_at_t = [action for action in self.domain.actions if action.name.endswith(f",{t})")] #vediamo solo le azioni che facciamo nell'istante in cui siamo
-    #         action_vars = [f"action_{action.name}" for action in actions_at_t]
-
-    #         print(f"\n⌛ Encoding actions at time step {t}:")
-    #         print(f"   Azioni trovate: {len(actions_at_t)}")
-    #         if len(actions_at_t) <= 10:
-    #             for a in actions_at_t:
-    #                 print(f"     - {a.name}")
-
-    #         # Per ogni azione, codifica precondizioni e effetti (temporizzati)
-    #         for action in actions_at_t:
-    #             action_var = f"action_{action.name}"
-    #             # print(f"   Codificando azione: {action.name}")
-    #             # print(f"     Precondizioni: {action.preconditions}")
-    #             # print(f"     Effetti positivi: {action.positive_effects}")
-    #             # print(f"     Effetti negativi: {action.negative_effects}")
-    #             for precond in action.preconditions:
-    #                 clauses.append([f"-{action_var}", precond])
-    #             for effect in action.positive_effects:
-    #                 clauses.append([f"-{action_var}", effect])
-    #             for effect in action.negative_effects:
-    #                 clauses.append([f"-{action_var}", f"-{effect}"])
-
-    #         # Vincolo: al massimo una azione per tempo t
-    #         for i in range(len(action_vars)):
-    #             for j in range(i + 1, len(action_vars)):
-    #                 clauses.append([f"-{action_vars[i]}", f"-{action_vars[j]}"])
-
-    #         print(f"   Vincoli mutual exclusion aggiunti per {len(action_vars)} azioni")
-
-    #         # (opzionale) Almeno una azione per tempo t, se si vuole
-    #         if action_vars:
-    #             clauses.append(action_vars)
-    #             print(f"   Vincolo: almeno una azione a tempo {t} (clausola con {len(action_vars)} variabili)")
-
-    #     print(f"\n✅ Total clauses generated for actions: {len(clauses)}")
-    #     return clauses
-
+    
     def encode_actions(self) -> List[List[str]]:
         clauses = []
         for t in range(1, self.domain.max_steps):  # fino a max_steps - 1 perché all'ultimo passo non si fanno azioni
@@ -379,6 +347,29 @@ class SATPlanningSolver:
         
         return clauses
 
+    def encode_stack_consistency(self) -> List[List[str]]:
+        """
+        Codifica i vincoli di coerenza tra proposizioni InStack e EmptyStack:
+        - Se uno stack s contiene almeno un blocco b al tempo t → ¬EmptyStack(s,t)
+        - Se EmptyStack(s,t) è vero → nessun blocco può essere in InStack(_, s, t)
+        """
+        clauses = []
+
+        for t in range(1, self.domain.max_steps + 1):
+            for s in range(1, self.domain.num_stacks + 1):
+                # 1) Mutual exclusion: se uno stack è vuoto, nessun blocco può essere in quello stack
+                for b in self.domain.blocks:
+                    clauses.append([f"-EmptyStack({s},{t})", f"-InStack({b},{s},{t})"])
+
+                # 2) Completamento: se nessun blocco è nello stack, allora lo stack è vuoto
+                # Clausola: InStack(b1,s,t) ∨ InStack(b2,s,t) ∨ ... ∨ EmptyStack(s,t)
+                instack_literals = [f"InStack({b},{s},{t})" for b in self.domain.blocks]
+                instack_literals.append(f"EmptyStack({s},{t})")
+                clauses.append(instack_literals)
+
+        return clauses
+
+    
     def _convert_clauses_to_cnf(self, clauses: List[List[str]]) -> Tuple[CNF, Dict[str, int], Dict[int, str]]:
         var_map: Dict[str, int] = {}
         reverse_map: Dict[int, str] = {}
@@ -481,6 +472,14 @@ class SATPlanningSolver:
         #     print(clause)
         self.clauses.extend(frame_clauses) # dovrebbe essere giusto
 
+
+        # Vincoli di coerenza tra InStack e EmptyStack
+        stack_consistency_clauses = self.encode_stack_consistency()
+        print("\n🟣 Stack Consistency Clauses:")
+        # for clause in stack_consistency_clauses:
+        #     print(clause)
+        self.clauses.extend(stack_consistency_clauses)
+        
         
         # Codifica il goal state
         goal_clauses = self.encode_goal_state(k)
@@ -559,6 +558,11 @@ def blocks_state_to_propositions(state: List[List[str]]) -> List[str]:
             top_block = stack[-1]
             # props.append(f"Top({top_block},{stack_idx})")
             props.append(f"Clear({top_block})")  # blocco libero, nessuno sopra
+
+     # Se lo stack è vuoto, lo segniamo
+    for stack_idx, stack in enumerate(state, start=1):
+        if not stack:
+            props.append(f"EmptyStack({stack_idx})")
 
 
     return props
