@@ -6,9 +6,10 @@ import os
 from typing import List, Dict, Set, Tuple, Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from itertools import combinations
-from pysat.formula import CNF
+from pysat.formula import CNF, WCNF
 from pysat.solvers import Solver
+from pysat.examples.rc2 import RC2
+
 
 @dataclass
 class Action:
@@ -57,7 +58,7 @@ class PlanningDomain:
                 for s1 in range(1, self.num_stacks + 1):
                     for s2 in range(1, self.num_stacks + 1):
                         if s1 != s2:
-                            actions.append(Action(
+                            a = Action(
                                 name=f"MoveFromStackToEmptyStack({x},{s1},{s2},{t})",
                                 # Precondizioni: x deve essere clear E nello stack s1 al tempo t
                                 # Move X from stack s1 to stack s2 con entrambi stack vuoti
@@ -68,7 +69,8 @@ class PlanningDomain:
                                 ],
                                 positive_effects=[f"InStack({x},{s2},{t+1})", f"EmptyStack({s1},{t+1})"],
                                 negative_effects=[f"InStack({x},{s1},{t+1})"]
-                            ))
+                            )
+                            actions.append(a)
 
             # MoveFromStackToBlock({x},{sx},{y},{sy},{t}), dove:
             # x è il blocco da spostare dal suo stack sx,
@@ -85,7 +87,7 @@ class PlanningDomain:
                         for sx in range(1, self.num_stacks + 1):  # stack dove sta x
                             for sy in range(1, self.num_stacks + 1):  # stack dove sta y
                                 if sx != sy:  # x e y devono essere in stack diversi
-                                    actions.append(Action(
+                                    a = Action(
                                         name=f"MoveFromStackToBlock({x},{sx},{y},{sy},{t})", 
                                         preconditions=[
                                             f"Clear({x},{t})",      
@@ -102,7 +104,8 @@ class PlanningDomain:
                                             f"InStack({x},{sx},{t+1})", 
                                             f"Clear({y},{t+1})"         
                                         ]
-                                    ))
+                                    )
+                                    actions.append(a)
             
             # 3. AZIONI MoveFromBlockToStack: sposta blocco da sopra un altro blocco a stack vuoto
             for x in self.blocks:
@@ -111,7 +114,7 @@ class PlanningDomain:
                         for sxy in range(1, self.num_stacks + 1):  # stack dove sta y (e sopra x)
                             for s_dest in range(1, self.num_stacks + 1):  # stack destinazione
                                 if sxy != s_dest:
-                                    actions.append(Action(
+                                    a = Action(
                                         name=f"MoveFromBlockToEmptyStack({x},{y},{sxy},{s_dest},{t})", 
                                         preconditions=[
                                             f"Clear({x},{t})",      
@@ -129,7 +132,8 @@ class PlanningDomain:
                                             f"InStack({x},{sxy},{t+1})",   # x non è più nello stack sx
                                             f"EmptyStack({s_dest},{t+1})"
                                         ]
-                                    ))
+                                    )
+                                    actions.append(a)
 
             
             # 4. AZIONI MoveFromBlockToBlock: sposta blocco da sopra un blocco a sopra un altro blocco
@@ -140,7 +144,7 @@ class PlanningDomain:
                             for sxy in range(1, self.num_stacks + 1):  # stack dove stanno x e y
                                 for sz in range(1, self.num_stacks + 1):  # stack dove sta z
                                     if sxy != sz:  # devono essere in stack diversi
-                                        actions.append(Action(
+                                        a = Action(
                                             name=f"MoveFromBlockToBlock({x},{y},{sxy},{z},{sz},{t})", 
                                             preconditions=[
                                                 f"Clear({x},{t})",      
@@ -160,7 +164,8 @@ class PlanningDomain:
                                                 f"InStack({x},{sxy},{t+1})", # x non è più nello stack sx
                                                 f"Clear({z},{t+1})"       # z non è più libero
                                             ]
-                                        ))
+                                        )
+                                        actions.append(a)
 
         return actions
 
@@ -369,7 +374,241 @@ class SATPlanningSolver:
 
         return clauses
 
+    def encode_no_bounce_moves_constraint(self) -> List[List[str]]:
+        """
+        Impedisce mosse "rimbalzo": se puoi andare da A→C direttamente,
+        non fare A→B→C
+        """
+        clauses = []
+        
+        for t in range(1, self.domain.max_steps - 1):
+            for block in self.domain.blocks:
+                
+                # Per ogni azione al tempo t che muove questo blocco
+                for action_t in self.domain.actions:
+                    if not self._action_moves_block_at_time(action_t.name, block, t):
+                        continue
+                        
+                    source_pos = self._extract_source_from_action(action_t.name)
+                    intermediate_pos = self._extract_destination_from_action(action_t.name)
+                    
+                    # Per ogni azione al tempo t+1 che muove lo stesso blocco
+                    for action_t_plus_1 in self.domain.actions:
+                        if not self._action_moves_block_at_time(action_t_plus_1.name, block, t+1):
+                            continue
+                            
+                        intermediate_check = self._extract_source_from_action(action_t_plus_1.name)
+                        final_pos = self._extract_destination_from_action(action_t_plus_1.name)
+                        
+                        # Controlla se è una sequenza A→B→C
+                        if (intermediate_pos == intermediate_check and  # B è connesso
+                            source_pos != final_pos):  # Non è un movimento circolare
+                            
+                            # Cerca se esiste un'azione diretta A→C al tempo t
+                            direct_action = self._find_direct_action_between_positions(
+                                block, source_pos, final_pos, t
+                            )
+                            
+                            if direct_action:
+                                # print(f"🚫 RIMBALZO VIETATO:")
+                                # print(f"   Invece di: {action_t.name} + {action_t_plus_1.name}")
+                                # print(f"   Usa diretto: {direct_action.name}")
+                                
+                                # Clausola: se esiste l'azione diretta, vieta la sequenza
+                                # ¬action_t ∨ ¬action_t+1 ∨ direct_action
+                                clauses.append([
+                                    f"-{action_t.name}", 
+                                    f"-{action_t_plus_1.name}"
+                                ])
+        
+        return clauses
+
+    def _action_moves_block_at_time(self, action_name, block, time):
+        """
+        Controlla se un'azione muove un blocco specifico a un tempo specifico
+        
+        Esempi di action_name:
+        - "MoveFromStackToEmptyStack(A,1,2,3)" -> muove A al tempo 3
+        - "MoveFromStackToBlock(B,1,C,2,4)" -> muove B al tempo 4  
+        - "MoveFromBlockToEmptyStack(C,D,1,2,5)" -> muove C al tempo 5
+        - "MoveFromBlockToBlock(D,E,1,F,2,6)" -> muove D al tempo 6
+        """
     
+        # Estrai i parametri dall'azione
+        params_str = action_name.split('(')[1].split(')')[0]
+        params = [p.strip() for p in params_str.split(',')]
+        
+        # Il primo parametro è sempre il blocco che si muove
+        moved_block = params[0]
+        # L'ultimo parametro è sempre il tempo
+        action_time = int(params[-1])
+        
+        return moved_block == block and action_time == time
+    
+    def _find_direct_action_between_positions(self, block, source_pos, dest_pos, time):
+        """
+        Cerca un'azione che porta il blocco direttamente da source_pos a dest_pos al tempo time
+        """
+        for action in self.domain.actions:
+
+            if (self._action_moves_block_at_time(action.name, block, time) and
+                self._extract_source_from_action(action.name) == source_pos and
+                self._extract_destination_from_action(action.name) == dest_pos):
+                return action
+        return None
+    
+    def _extract_source_from_action(self, action_name):
+        """
+        Estrae la posizione di partenza da un'azione
+        """
+        if "MoveFromStackToEmptyStack" in action_name:
+            # MoveFromStackToEmptyStack(A,1,2,3) -> source: stack 1
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"stack_{params[1]}"
+        
+        elif "MoveFromStackToBlock" in action_name:
+            # MoveFromStackToBlock(A,1,B,2,3) -> source: stack 1
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"stack_{params[1]}"
+        
+        elif "MoveFromBlockToEmptyStack" in action_name:
+            # MoveFromBlockToEmptyStack(A,B,1,2,3) -> source: on block B stack 1
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"on_{params[1]}_stack_{params[2]}"
+
+        elif "MoveFromBlockToBlock" in action_name:
+            # MoveFromBlockToBlock(A,B,1,C,2,3) -> source: on block B stack 1
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"on_{params[1]}_stack_{params[2]}"
+
+        
+        return None
+
+    def _extract_destination_from_action(self, action_name):
+        """
+        Estrae la posizione di arrivo da un'azione
+        """
+        if "MoveFromStackToEmptyStack" in action_name:
+            # MoveFromStackToEmptyStack(A,1,2,3) -> dest: stack 2
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"stack_{params[2]}"
+        
+        elif "MoveFromStackToBlock" in action_name:
+            # MoveFromStackToBlock(A,1,B,2,3) -> dest: on block B stack 2
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"on_{params[2]}_stack_{params[3]}"
+        
+        elif "MoveFromBlockToEmptyStack" in action_name:
+            # MoveFromBlockToEmptyStack(A,B,1,2,3) -> dest: stack 2
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"stack_{params[3]}"
+        
+        elif "MoveFromBlockToBlock" in action_name:
+            # MoveFromBlockToBlock(A,B,1,C,2,3) -> dest: on block C stack 2
+            params = action_name.split('(')[1].split(')')[0].split(',')
+            return f"on_{params[3]}_stack_{params[4]}"
+        
+        return None
+
+    def encode_goal_directed_constraint(self) -> List[List[str]]:
+        """
+        Impedisce movimenti intermedi inutili quando esiste un'azione diretta 
+        che porta il blocco direttamente alla sua posizione nel goal
+        """
+        clauses = []
+        
+        for t in range(1, self.domain.max_steps - 1):
+            for block in self.domain.blocks:
+                
+                # Trova dove dovrebbe finire questo blocco nel goal
+                goal_position = self._find_block_goal_position(block)
+                if not goal_position:
+                    continue
+                    
+                print(f"🎯 Goal per {block}: {goal_position}")
+                
+                # Per ogni azione al tempo t che muove questo blocco
+                for action_t in self.domain.actions:
+                    if not self._action_moves_block_at_time(action_t.name, block, t):
+                        continue
+                        
+                    source_pos = self._extract_source_from_action(action_t.name)
+                    intermediate_pos = self._extract_destination_from_action(action_t.name)
+                    
+                    # Per ogni azione al tempo t+1 che muove lo stesso blocco dalla posizione intermedia
+                    for action_t_plus_1 in self.domain.actions:
+                        if not self._action_moves_block_at_time(action_t_plus_1.name, block, t+1):
+                            continue
+                            
+                        source_t_plus_1 = self._extract_source_from_action(action_t_plus_1.name)
+                        final_pos = self._extract_destination_from_action(action_t_plus_1.name)
+                        
+                        # Controlla se è una sequenza A→B→C dove C è il goal
+                        if (intermediate_pos == source_t_plus_1 and  # B è connesso
+                            self._position_matches_goal(final_pos, goal_position) and  # C è il goal
+                            not self._position_matches_goal(intermediate_pos, goal_position)):  # B non è il goal
+                            
+                            # Cerca se esiste un'azione diretta A→C
+                            direct_action = self._find_direct_action_between_positions(
+                                block, source_pos, final_pos, t
+                            )
+                            
+                            
+                            if direct_action:
+                                # print(f"🚫 VIETATA sequenza indiretta per {block}:")
+                                # print(f"   {action_t.name} + {action_t_plus_1.name}")
+                                # print(f"   Azione diretta disponibile: {direct_action.name}")
+                                
+                                # Se puoi fare l'azione diretta, allora non fare quella indiretta
+                                # ¬direct_action ∨ ¬action_t (se direct_action è possibile, non fare action_t)
+                                clauses.append([f"-{direct_action.name}", f"-{action_t.name}"])
+                                # E vieta anche la sequenza
+                                clauses.append([f"-{action_t.name}", f"-{action_t_plus_1.name}"])
+        
+        return clauses
+
+    def _find_block_goal_position(self, block):
+        """
+        Trova la posizione finale del blocco nel goal state
+        Parsa proposizioni come: ['InStack(F,2)', 'Clear(F)', 'On(C,B)', ...]
+        """
+        # Trova in quale stack dovrebbe stare il blocco
+        goal_stack = None
+        for prop in self.goal_state:
+            if f"InStack({block}," in prop:
+                # Estrai il numero dello stack da "InStack(F,2)" 
+                stack_num = int(prop.split(',')[1].replace(')', ''))
+                goal_stack = stack_num
+                break
+        
+        if goal_stack is None:
+            return None
+        
+        # Controlla se il blocco dovrebbe essere sopra un altro blocco
+        on_block = None
+        for prop in self.goal_state:
+            if f"On({block}," in prop:
+                # Estrai il blocco sotto da "On(B,A)"
+                under_block = prop.split(',')[1].replace(')', '')
+                on_block = under_block
+                break
+        
+        if on_block:
+            return {'type': 'on_block', 'stack': goal_stack, 'on_block': on_block}
+        else:
+            return {'type': 'stack', 'stack': goal_stack, 'on_block': None}
+
+    def _position_matches_goal(self, current_pos, goal_position):
+        """
+        Controlla se una posizione corrisponde al goal
+        """
+        if goal_position['type'] == 'stack':
+            # Il blocco dovrebbe essere da solo nello stack
+            return current_pos == f"stack_{goal_position['stack']}"
+        else:  # on_block
+            # Il blocco dovrebbe essere sopra un altro blocco specifico
+            return current_pos == f"on_{goal_position['on_block']}"
+
     def _convert_clauses_to_cnf(self, clauses: List[List[str]]) -> Tuple[CNF, Dict[str, int], Dict[int, str]]:
         var_map: Dict[str, int] = {}
         reverse_map: Dict[int, str] = {}
@@ -479,7 +718,21 @@ class SATPlanningSolver:
         # for clause in stack_consistency_clauses:
         #     print(clause)
         self.clauses.extend(stack_consistency_clauses)
-        
+
+
+        # no_intermediate_clauses = self.encode_no_bounce_moves_constraint()
+        # print("\n🟠 No Intermediate Moves Clauses:")
+        # # for clause in no_intermediate_clauses:
+        # #     print(clause)
+        # self.clauses.extend(no_intermediate_clauses)
+
+        #  # Aggiungi il vincolo goal-directed
+        # goal_directed_clauses = self.encode_goal_directed_constraint()
+        # print("\n🎯 Goal-Directed Constraint Clauses:")
+        # # for clause in goal_directed_clauses:
+        # #     print(clause)
+        # self.clauses.extend(goal_directed_clauses)
+
         
         # Codifica il goal state
         goal_clauses = self.encode_goal_state(k)
@@ -491,10 +744,54 @@ class SATPlanningSolver:
         print(f"Generated {len(self.clauses)} clauses for k={k}")
 
         cnf, var_map, reverse_map = self._convert_clauses_to_cnf(self.clauses)
-        # print(cnf)
-        # print(var_map)
-        # print(reverse_map)
+
         return self._solve_cnf_with_pysat(cnf, var_map, reverse_map)
+    
+
+    def solve_partial_maxsat(self) -> Optional[Dict]:
+        print("🧪 Costruzione formula Partial MaxSAT...")
+
+        wcnf = WCNF()
+
+        var_map = {}
+        reverse_map = {}
+        counter = [1]
+
+        def get_var(name):
+            if name not in var_map:
+                var_map[name] = counter[0]
+                reverse_map[counter[0]] = name
+                counter[0] += 1
+            return var_map[name]
+
+        # HARD: On and Clear
+        for clause in self.clauses:
+            if any("On(" in lit or "Clear(" in lit for lit in clause):
+                wcnf.append([get_var(lit) if not lit.startswith('-') else -get_var(lit[1:]) for lit in clause])
+        
+        # SOFT: InStack
+        for clause in self.clauses:
+            if any("InStack(" in lit for lit in clause) and len(clause) == 1:
+                lit = clause[0]
+                wcnf.append([get_var(lit) if not lit.startswith('-') else -get_var(lit[1:])], weight=1)
+
+        # Solviamo con RC2
+        with RC2(wcnf) as rc2:
+            model = rc2.compute()
+
+        if model is None:
+            print("❌ Nessuna soluzione MaxSAT trovata.")
+            return None
+
+        # Estrai azioni dalla soluzione
+        selected = [reverse_map[abs(v)] for v in model if v > 0 and reverse_map.get(abs(v), '').startswith('action_')]
+        selected.sort(key=lambda x: int(x.split(',')[-1].strip(')')))  # ordina per tempo
+
+        return {
+            'plan': selected,
+            'steps': max(int(x.split(',')[-1].strip(')')) for x in selected) if selected else 0
+        }
+
 
     def find_shortest_plan(self) -> Dict:
         print("🚀 Starting SAT-based planning with stacks...")
@@ -531,9 +828,25 @@ class SATPlanningSolver:
             }
 
         print("❌ Nessun piano trovato entro il limite massimo di passi")
+        print("🔄 Tentativo con Partial MaxSAT...")
+
+        partial_result = self.solve_partial_maxsat()
+        if partial_result is not None and partial_result.get('plan'):
+            print("✅ Piano parziale trovato con MaxSAT!")
+            for step in partial_result['plan']:
+                print("  ", step.replace("action_", "→ "))
+            return {
+                'success': True,
+                'optimal_plan': partial_result['plan'],
+                'steps': partial_result['steps'],
+                'used_partial_maxsat': True,
+                'all_results': results
+            }
+
         return {
             'success': False,
-            'message': 'Nessun piano trovato',
+            'message': 'Nessun piano trovato nemmeno con MaxSAT',
+            'used_partial_maxsat': True,
             'all_results': results
         }
 
