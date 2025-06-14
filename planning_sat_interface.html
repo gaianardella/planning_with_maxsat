@@ -752,6 +752,14 @@
             //         </div>
             //     `;
             
+
+            } else {
+                planStepsDiv.innerHTML = `
+                    <div class="plan-step" style="border-left-color: #dc3545;">
+                        ❌ <strong>No plan found with SAT nor MaxSAT</strong><br>
+                        Unable to find a plan within the specified constraints.
+                    </div>
+                `;
             }
             
             resultsDiv.classList.add('show');
