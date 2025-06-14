@@ -294,33 +294,6 @@
             font-family: 'Courier New', monospace;
         }
 
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .stat-card h4 {
-            color: #6c757d;
-            font-size: 0.9rem;
-            margin-bottom: 5px;
-        }
-
-        .stat-card .value {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: #495057;
-        }
-
         .loading {
             text-align: center;
             padding: 40px;
@@ -362,6 +335,71 @@
             display: block;
             animation: slideIn 0.5s ease;
         }
+
+        .mini-stacks-area {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;                 
+            min-height: 100px;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+
+
+        .mini-stack {
+            width: 60px;
+            min-height: 90px;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: center;
+            padding: 8px 6px;
+            background: rgba(255, 255, 255, 0.9);
+            position: relative;
+            font-size: 0.8em;
+        }
+
+        .mini-stack-label {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: bold;
+            color: #495057;
+            background: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1.5px solid #dee2e6;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .mini-block {
+            width: 40px;
+            height: 25px;
+            margin: 3px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.85em;
+            color: white;
+            user-select: none;
+            pointer-events: none; /* disabilita drag & drop */
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+            border: 1.5px solid rgba(255,255,255,0.5);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+
+        .mini-block[data-block="A"] { background: linear-gradient(135deg, #ff6b6b, #ee5a52); }
+        .mini-block[data-block="B"] { background: linear-gradient(135deg, #4ecdc4, #44a08d); }
+        .mini-block[data-block="C"] { background: linear-gradient(135deg, #ffe66d, #ff6b35); }
+        .mini-block[data-block="D"] { background: linear-gradient(135deg, #51cf66, #40c057); }
+        .mini-block[data-block="E"] { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+        .mini-block[data-block="F"] { background: linear-gradient(135deg, #1abc9c, #16a085); }
+
 
         @media (max-width: 768px) {
             .workspace {
@@ -524,6 +562,162 @@
             block.addEventListener('dragend', handleDragEnd);
             
             return block;
+        }
+
+        function createMiniBlock(name) {
+            const block = document.createElement('div');
+            block.className = 'mini-block';
+            block.textContent = name;
+            block.dataset.block = name;
+            return block;
+        }
+
+        // function renderMiniState(state, container) {
+        //     // Clear container
+        //     container.innerHTML = '';
+            
+        //     // Create mini stacks area
+        //     const miniStacksArea = document.createElement('div');
+        //     miniStacksArea.className = 'mini-stacks-area';
+            
+        //     // Create 3 mini stacks
+        //     for (let i = 0; i < 3; i++) {
+        //         const miniStack = document.createElement('div');
+        //         miniStack.className = 'mini-stack';
+                
+        //         const label = document.createElement('div');
+        //         label.className = 'mini-stack-label';
+        //         label.textContent = `S${i + 1}`;
+        //         miniStack.appendChild(label);
+                
+        //         // Add blocks to this stack
+        //         if (state[i]) {
+        //             state[i].forEach(blockName => {
+        //                 const miniBlock = createMiniBlock(blockName);
+        //                 miniStack.appendChild(miniBlock);
+        //             });
+        //         }
+                
+        //         miniStacksArea.appendChild(miniStack);
+        //     }
+            
+        //     container.appendChild(miniStacksArea);
+        // }
+        
+        function renderMiniState(state, container) {
+            // Create mini stacks area
+            const miniStacksArea = document.createElement('div');
+            miniStacksArea.className = 'mini-stacks-area';
+            
+            // Create 3 mini stacks
+            for (let i = 0; i < 3; i++) {
+                const miniStack = document.createElement('div');
+                miniStack.className = 'mini-stack';
+                
+                const label = document.createElement('div');
+                label.className = 'mini-stack-label';
+                label.textContent = `S${i + 1}`;
+                miniStack.appendChild(label);
+                
+                // Add blocks to this stack
+                if (state[i] && state[i].length > 0) {
+                    state[i].forEach(blockName => {
+                        const miniBlock = createMiniBlock(blockName);
+                        miniStack.appendChild(miniBlock);
+                    });
+                }
+                
+                miniStacksArea.appendChild(miniStack);
+            }
+            
+            container.appendChild(miniStacksArea);
+        }
+
+        function parseAction(actionString) {
+            // Parse action string like "MoveFromStackToBlock(C,2,D,3,1)"
+            const match = actionString.match(/(\w+)\(([^)]+)\)/);
+            if (!match) return null;
+            
+            const [, actionType, params] = match;
+            const paramList = params.split(',');
+            
+            return {
+                type: actionType,
+                params: paramList
+            };
+        }
+
+        function applyActionToState(state, action) {
+            // Create a deep copy of the state
+            const newState = state.map(stack => [...stack]);
+            
+            const actionInfo = parseAction(action);
+            if (!actionInfo) return newState;
+            
+            const { type, params } = actionInfo;
+            
+            if (type === 'MoveFromStackToStack') {
+                // MoveFromStackToStack(block, fromStack, toStack, step)
+                const [block, fromStack, toStack] = params;
+                const fromIdx = parseInt(fromStack) - 1; // Convert to 0-based
+                const toIdx = parseInt(toStack) - 1;
+                
+                // Remove block from source stack (from top)
+                const blockIndex = newState[fromIdx].indexOf(block);
+                if (blockIndex !== -1) {
+                    newState[fromIdx].splice(blockIndex, 1);
+                }
+                
+                // Add block to destination stack (on top)
+                newState[toIdx].push(block);
+                
+            } else if (type === 'MoveFromStackToBlock') {
+                // MoveFromStackToBlock(block, fromStack, targetBlock, toStack, step)
+                const [block, fromStack, targetBlock, toStack] = params;
+                const fromIdx = parseInt(fromStack) - 1;
+                const toIdx = parseInt(toStack) - 1;
+                
+                // Remove block from source stack
+                const blockIndex = newState[fromIdx].indexOf(block);
+                if (blockIndex !== -1) {
+                    newState[fromIdx].splice(blockIndex, 1);
+                }
+                
+                // Add block to destination stack (on top)
+                newState[toIdx].push(block);
+                
+            } else if (type === 'MoveFromBlockToStack') {
+                // MoveFromBlockToStack(block, sourceBlock, fromStack, toStack, step)
+                const [block, sourceBlock, fromStack, toStack] = params;
+                const fromIdx = parseInt(fromStack) - 1;
+                const toIdx = parseInt(toStack) - 1;
+                
+                // Remove block from source stack
+                const blockIndex = newState[fromIdx].indexOf(block);
+                if (blockIndex !== -1) {
+                    newState[fromIdx].splice(blockIndex, 1);
+                }
+                
+                // Add block to destination stack
+                newState[toIdx].push(block);
+                
+            } else if (type === 'MoveFromBlockToBlock') {
+                // MoveFromBlockToBlock(block, sourceBlock, fromStack, targetBlock, toStack, step)
+                const [block, sourceBlock, fromStack, targetBlock, toStack] = params;
+                const fromIdx = parseInt(fromStack) - 1;
+                const toIdx = parseInt(toStack) - 1;
+                
+                // Remove block from source stack
+                const blockIndex = newState[fromIdx].indexOf(block);
+                if (blockIndex !== -1) {
+                    newState[fromIdx].splice(blockIndex, 1);
+                }
+                
+                // Add block to destination stack
+                newState[toIdx].push(block);
+            }
+            
+            return newState;
         }
 
         function handleDragStart(e) {
@@ -696,62 +890,49 @@
         function displayResults(result) {
             const resultsDiv = document.getElementById('results');
             const planStepsDiv = document.getElementById('planSteps');
-            const statsDiv = document.getElementById('statsContainer');
             
             // Clear previous results
             planStepsDiv.innerHTML = '';
-            statsDiv.innerHTML = '';
-            
-            if (result.success) {
 
+            if (result.success) {
                 if (result.optimal_plan && result.optimal_plan.length > 0) {
+                    // Simulate the plan execution to show intermediate states
+                    let currentState = gameState.initial.map(stack => [...stack]);
+                    
                     result.optimal_plan.forEach((step, index) => {
-                        // step è una stringa tipo 'action_MoveFromStackToBlock(C,2,D,3,1)'
+                        // Apply the action to get the new state
                         const cleanStep = step.replace(/^action_/, '');
+                        const newState = applyActionToState(currentState, cleanStep);
+                        
+                        // Create step container
                         const stepDiv = document.createElement('div');
                         stepDiv.className = 'plan-step';
-                        stepDiv.textContent = `Step ${index + 1}: ${cleanStep}`;
+                        
+                        // Create step content
+                        const stepContent = document.createElement('div');
+                        stepContent.className = 'plan-step-content';
+                        stepContent.textContent = `Step ${index + 1}: ${cleanStep}`;
+                        
+                        // Create visualization container
+                        const visualizationDiv = document.createElement('div');
+                        visualizationDiv.className = 'step-visualization';
+                                                
+                        // Render the mini state
+                        renderMiniState(newState, visualizationDiv);
+                        
+                        // Add both to step div
+                        stepDiv.appendChild(stepContent);
+                        stepDiv.appendChild(visualizationDiv);
+                        
                         planStepsDiv.appendChild(stepDiv);
+                        
+                        // Update current state for next iteration
+                        currentState = newState;
                     });
 
                 } else {
                     planStepsDiv.innerHTML = '<div class="plan-step">✅ Goal already achieved - no actions needed!</div>';
                 }
-                
-            //     // Display statistics
-            //     const stats = [
-            //         { label: 'Optimal Steps', value: result.optimal_steps || 0 },
-            //         { label: 'Total Time', value: `${(result.total_time || 0).toFixed(3)}s` },
-            //         { label: 'Propositions', value: result.domain_info?.propositions || 0 },
-            //         { label: 'Actions', value: result.domain_info?.actions || 0 },
-            //     ];
-                
-            //     if (result.attempts && result.attempts.length > 0) {
-            //         const lastAttempt = result.attempts[result.attempts.length - 1];
-            //         stats.push(
-            //             { label: 'SAT Clauses', value: lastAttempt.clauses || 0 },
-            //             { label: 'SAT Variables', value: lastAttempt.variables || 0 }
-            //         );
-            //     }
-                
-            //     stats.forEach(stat => {
-            //         const statCard = document.createElement('div');
-            //         statCard.className = 'stat-card';
-            //         statCard.innerHTML = `
-            //             <h4>${stat.label}</h4>
-            //             <div class="value">${stat.value}</div>
-            //         `;
-            //         statsDiv.appendChild(statCard);
-            //     });
-                
-            // } else {
-            //     planStepsDiv.innerHTML = `
-            //         <div class="plan-step" style="border-left-color: #dc3545;">
-            //             ❌ <strong>No solution found</strong><br>
-            //             ${result.message || 'Unable to find a plan within the specified constraints'}
-            //         </div>
-            //     `;
-            
 
             } else {
                 planStepsDiv.innerHTML = `
