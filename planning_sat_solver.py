@@ -677,7 +677,7 @@ class SATPlanningSolver:
                     for a in actions_at_t[:10]:
                         print(f"  {a}")
 
-                return None #DA CAMBIARE, IN QUESTO CASO DOBBIAMO FARE UN WEIGHTED MAXSAT
+                return None 
 
     def solve_for_k_steps(self, k: int) -> Optional[Dict]:
         print(f"🔍 Trying to solve with {k} steps...")
@@ -747,55 +747,10 @@ class SATPlanningSolver:
 
         return self._solve_cnf_with_pysat(cnf, var_map, reverse_map)
     
-
-    def solve_partial_maxsat(self) -> Optional[Dict]:
-        print("🧪 Costruzione formula Partial MaxSAT...")
-
-        wcnf = WCNF()
-
-        var_map = {}
-        reverse_map = {}
-        counter = [1]
-
-        def get_var(name):
-            if name not in var_map:
-                var_map[name] = counter[0]
-                reverse_map[counter[0]] = name
-                counter[0] += 1
-            return var_map[name]
-
-        # HARD: On and Clear
-        for clause in self.clauses:
-            if any("On(" in lit or "Clear(" in lit for lit in clause):
-                wcnf.append([get_var(lit) if not lit.startswith('-') else -get_var(lit[1:]) for lit in clause])
-        
-        # SOFT: InStack
-        for clause in self.clauses:
-            if any("InStack(" in lit for lit in clause) and len(clause) == 1:
-                lit = clause[0]
-                wcnf.append([get_var(lit) if not lit.startswith('-') else -get_var(lit[1:])], weight=1)
-
-        # Solviamo con RC2
-        with RC2(wcnf) as rc2:
-            model = rc2.compute()
-
-        if model is None:
-            print("❌ Nessuna soluzione MaxSAT trovata.")
-            return None
-
-        # Estrai azioni dalla soluzione
-        selected = [reverse_map[abs(v)] for v in model if v > 0 and reverse_map.get(abs(v), '').startswith('action_')]
-        selected.sort(key=lambda x: int(x.split(',')[-1].strip(')')))  # ordina per tempo
-
-        return {
-            'plan': selected,
-            'steps': max(int(x.split(',')[-1].strip(')')) for x in selected) if selected else 0
-        }
-
-
     def find_shortest_plan(self) -> Dict:
         print("🚀 Starting SAT-based planning with stacks...")
         results = []
+        partial_results = []
 
         if self.max_steps < 2:
             return {
@@ -830,25 +785,140 @@ class SATPlanningSolver:
         print("❌ Nessun piano trovato entro il limite massimo di passi")
         print("🔄 Tentativo con Partial MaxSAT...")
 
-        partial_result = self.solve_partial_maxsat()
-        if partial_result is not None and partial_result.get('plan'):
+        for k in range(2, self.max_steps + 1):
+            partial_result = self.solve_partial_maxsat_for_k_steps(k)
+            partial_results.append(partial_result)
+            print(partial_results)
+
+            if partial_result is None or not partial_result.get('plan'):
+                continue
+
             print("✅ Piano parziale trovato con MaxSAT!")
             for step in partial_result['plan']:
-                print("  ", step.replace("action_", "→ "))
+                    print("  ", step.replace("action_", "→ "))
             return {
                 'success': True,
                 'optimal_plan': partial_result['plan'],
-                'steps': partial_result['steps'],
-                'used_partial_maxsat': True,
-                'all_results': results
+                'steps': k,
+                'all_results': partial_results
             }
 
         return {
             'success': False,
             'message': 'Nessun piano trovato nemmeno con MaxSAT',
-            'used_partial_maxsat': True,
             'all_results': results
         }
+
+    def solve_partial_maxsat_for_k_steps(self, k: int) -> Optional[Dict]:
+        print(f"🧪 Trying Partial MaxSAT with {k} steps...")
+
+        # Setup normale
+        domain_k = PlanningDomain(self.domain.blocks, self.num_stacks, k)
+        self.domain = domain_k
+        self.clauses = []
+        
+        # HARD: Solo logica fondamentale
+        self.clauses.extend(self.encode_initial_state())
+        self.clauses.extend(self.encode_actions())
+        self.clauses.extend(self.encode_frame_axioms())
+        # ❌ RIMUOVI: self.clauses.extend(self.encode_stack_consistency())
+
+        # Categorizzazione SMART del goal
+        goal_clauses = self.encode_goal_state(k)
+        hard_clauses = list(self.clauses)
+        soft_clauses = []
+
+        for goal in goal_clauses:
+            # HARD: Relazioni On() - DEVONO essere soddisfatte
+            if any("On(" in lit for lit in goal):
+                hard_clauses.append(goal)
+            # SOFT: Posizioni InStack/EmptyStack - preferenze
+            elif any("InStack(" in lit or "EmptyStack(" in lit for lit in goal):
+                soft_clauses.append(goal)
+            # HARD: Tutto il resto
+            else:
+                hard_clauses.append(goal)
+
+        print(f"📊 Hard: {len(hard_clauses)} (logica + On), Soft: {len(soft_clauses)} (posizioni)")
+        
+        # Costruisci WCNF
+        wcnf = WCNF()
+        var_map = {}
+        reverse_map = {}
+        counter = [1]
+
+        def get_var(name):
+            if name not in var_map:
+                var_map[name] = counter[0]
+                reverse_map[counter[0]] = name
+                counter[0] += 1
+            return var_map[name]
+        
+        def convert_clause(clause):
+            return [
+                get_var(lit) if not lit.startswith('-') else -get_var(lit[1:])
+                for lit in clause
+            ]
+
+         # Aggiungi HARD clauses (senza weight = peso infinito)
+        for clause in hard_clauses:
+            wcnf.append(convert_clause(clause))
+        
+        # Aggiungi SOFT clauses (con weight = peso finito)
+        for clause in soft_clauses:
+            wcnf.append(convert_clause(clause), weight=1)
+
+        # Calcola top weight come nell'esempio
+        wcnf.topw = sum(wcnf.wght) + 1
+
+        # Debug WCNF
+        print(f"🔧 WCNF costruita:")
+        print(f"   Hard clauses: {len(wcnf.hard)}")
+        print(f"   Soft clauses: {len(wcnf.soft)}")
+        print(f"   Pesi soft: {wcnf.wght}")
+        print(f"   Top weight: {wcnf.topw}")
+
+
+        # Verifica che On(D,B,k) sia nelle hard
+        on_db_var = var_map.get(f"On(D,B,{k})")
+        if on_db_var:
+            on_db_in_hard = any(on_db_var in clause for clause in wcnf.hard)
+            print(f"   On(D,B,{k}) = var {on_db_var}, in hard: {on_db_in_hard}")
+
+        # Risolvi con RC2
+        with RC2(wcnf) as rc2:
+            model = rc2.compute()
+            
+            if model is not None:
+                true_literals = {
+                    reverse_map[abs(lit)] for lit in model 
+                    if lit > 0 and abs(lit) in reverse_map
+                }
+                
+                # Verifica relazioni On() finali
+                final_on_relations = [lit for lit in true_literals if f"On(" in lit and f",{k})" in lit]
+                print(f"\n🔗 Relazioni On() al tempo {k}:")
+                for rel in final_on_relations:
+                    print(f"  ✅ {rel}")
+                
+                # Verifica specificamente On(D,B,k)
+                on_db_satisfied = f"On(D,B,{k})" in true_literals
+                print(f"\n🎯 On(D,B,{k}) soddisfatto: {on_db_satisfied}")
+                
+                plan = sorted(
+                    [lit for lit in true_literals if lit.startswith("action_")],
+                    key=lambda x: int(x.split(",")[-1].strip(")"))
+                )
+                
+                print(f"\n✅ Piano MaxSAT con {len(plan)} azioni:")
+                for action in plan:
+                    print(f"  → {action}")
+                
+                return {"plan": plan}
+            else:
+                print("❌ Nessun piano trovato con Partial MaxSAT")
+                return None
+
 
 # Flask Server
 app = Flask(__name__, static_folder='.', static_url_path='')
@@ -911,16 +981,6 @@ def index():
         </body>
         </html>
         ''', 500
-
-# @app.route('/health')
-# def health_check():
-#     return jsonify({
-#         'status': 'healthy',
-#         'message': 'Planning with SAT server is running',
-#         'type': 'SAT Planning',
-#         'algorithms': ['SAT-based planning with incremental k'],
-#         'version': '1.0'
-#     })
 
 # @app.route('/solve/html', methods=['POST'])
 # def solve_html():
@@ -1038,13 +1098,15 @@ def solve_endpoint():
         # DEBUGGARE SOLVER
         solver = SATPlanningSolver(domain, initial_props, goal_props, max_steps, num_stacks)
         results = solver.find_shortest_plan()
+
+        print(results)
+
+        return jsonify(results), 200
         
-        return jsonify(results)
-            
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Unexpected server error: {str(e)}'}), 500
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 
 if __name__ == "__main__":

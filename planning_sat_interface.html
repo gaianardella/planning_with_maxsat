@@ -703,56 +703,55 @@
             statsDiv.innerHTML = '';
             
             if (result.success) {
-                // Display plan steps
+
                 if (result.optimal_plan && result.optimal_plan.length > 0) {
                     result.optimal_plan.forEach((step, index) => {
+                        // step è una stringa tipo 'action_MoveFromStackToBlock(C,2,D,3,1)'
+                        const cleanStep = step.replace(/^action_/, '');
                         const stepDiv = document.createElement('div');
                         stepDiv.className = 'plan-step';
-                        stepDiv.innerHTML = `
-                            <strong>Step ${step.step}:</strong> ${step.action}
-                            <div style="color: #6c757d; font-size: 0.9rem; margin-top: 5px;">
-                                ${step.description}
-                            </div>
-                        `;
+                        stepDiv.textContent = `Step ${index + 1}: ${cleanStep}`;
                         planStepsDiv.appendChild(stepDiv);
                     });
+
                 } else {
                     planStepsDiv.innerHTML = '<div class="plan-step">✅ Goal already achieved - no actions needed!</div>';
                 }
                 
-                // Display statistics
-                const stats = [
-                    { label: 'Optimal Steps', value: result.optimal_steps || 0 },
-                    { label: 'Total Time', value: `${(result.total_time || 0).toFixed(3)}s` },
-                    { label: 'Propositions', value: result.domain_info?.propositions || 0 },
-                    { label: 'Actions', value: result.domain_info?.actions || 0 },
-                ];
+            //     // Display statistics
+            //     const stats = [
+            //         { label: 'Optimal Steps', value: result.optimal_steps || 0 },
+            //         { label: 'Total Time', value: `${(result.total_time || 0).toFixed(3)}s` },
+            //         { label: 'Propositions', value: result.domain_info?.propositions || 0 },
+            //         { label: 'Actions', value: result.domain_info?.actions || 0 },
+            //     ];
                 
-                if (result.attempts && result.attempts.length > 0) {
-                    const lastAttempt = result.attempts[result.attempts.length - 1];
-                    stats.push(
-                        { label: 'SAT Clauses', value: lastAttempt.clauses || 0 },
-                        { label: 'SAT Variables', value: lastAttempt.variables || 0 }
-                    );
-                }
+            //     if (result.attempts && result.attempts.length > 0) {
+            //         const lastAttempt = result.attempts[result.attempts.length - 1];
+            //         stats.push(
+            //             { label: 'SAT Clauses', value: lastAttempt.clauses || 0 },
+            //             { label: 'SAT Variables', value: lastAttempt.variables || 0 }
+            //         );
+            //     }
                 
-                stats.forEach(stat => {
-                    const statCard = document.createElement('div');
-                    statCard.className = 'stat-card';
-                    statCard.innerHTML = `
-                        <h4>${stat.label}</h4>
-                        <div class="value">${stat.value}</div>
-                    `;
-                    statsDiv.appendChild(statCard);
-                });
+            //     stats.forEach(stat => {
+            //         const statCard = document.createElement('div');
+            //         statCard.className = 'stat-card';
+            //         statCard.innerHTML = `
+            //             <h4>${stat.label}</h4>
+            //             <div class="value">${stat.value}</div>
+            //         `;
+            //         statsDiv.appendChild(statCard);
+            //     });
                 
-            } else {
-                planStepsDiv.innerHTML = `
-                    <div class="plan-step" style="border-left-color: #dc3545;">
-                        ❌ <strong>No solution found</strong><br>
-                        ${result.message || 'Unable to find a plan within the specified constraints'}
-                    </div>
-                `;
+            // } else {
+            //     planStepsDiv.innerHTML = `
+            //         <div class="plan-step" style="border-left-color: #dc3545;">
+            //             ❌ <strong>No solution found</strong><br>
+            //             ${result.message || 'Unable to find a plan within the specified constraints'}
+            //         </div>
+            //     `;
+            
             }
             
             resultsDiv.classList.add('show');
