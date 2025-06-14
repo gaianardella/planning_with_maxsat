@@ -284,6 +284,18 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
+        .plan-step-content {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #495057;
+            flex: 1;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            /* padding-top: 50px;  */
+        }
+
+
         .plan-step-html {
             background: white;
             padding: 15px;
@@ -336,14 +348,16 @@
             animation: slideIn 0.5s ease;
         }
 
+
         .mini-stacks-area {
             display: flex;
             justify-content: flex-end;
-            gap: 8px;                 
-            min-height: 100px;
-            align-items: flex-end;
-            margin-top: 10px;
+            gap: 8px;
+            min-height: 80px;
+            align-items: center;      /* cambia da flex-end a center */
+            margin-top: 0;            /* elimina lo spazio sopra */
         }
+
 
 
         .mini-stack {
@@ -912,6 +926,7 @@
                         const stepContent = document.createElement('div');
                         stepContent.className = 'plan-step-content';
                         stepContent.textContent = `Step ${index + 1}: ${cleanStep}`;
+
                         
                         // Create visualization container
                         const visualizationDiv = document.createElement('div');
