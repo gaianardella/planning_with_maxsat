@@ -906,6 +906,14 @@
             const resultsDiv = document.getElementById('results');
             const planStepsDiv = document.getElementById('planSteps');
             
+
+             // 🔹 Aggiorna il titolo in base al tipo di risoluzione
+            const resultsTitle = resultsDiv.querySelector('h3');
+            resultsTitle.textContent = result.max_sat
+                ? '📊 Planning Results: solved with Partial MaxSAT'
+                : '📊 Planning Results: solved with SAT';
+
+
             // Clear previous results
             planStepsDiv.innerHTML = '';
 

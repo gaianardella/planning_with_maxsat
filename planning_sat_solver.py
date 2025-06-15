@@ -779,7 +779,8 @@ class SATPlanningSolver:
                 'success': True,
                 'optimal_plan': result['plan'],
                 'steps': k,
-                'all_results': results
+                'all_results': results,
+                'max_sat': False
             }
 
         print("❌ Nessun piano trovato entro il limite massimo di passi")
@@ -800,7 +801,8 @@ class SATPlanningSolver:
                 'success': True,
                 'optimal_plan': partial_result['plan'],
                 'steps': k,
-                'all_results': partial_results
+                'all_results': partial_results,
+                'max_sat': True
             }
 
         return {
