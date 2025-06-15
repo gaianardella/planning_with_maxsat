@@ -205,7 +205,7 @@
         .block[data-block="C"] { background: linear-gradient(135deg, #ffe66d, #ff6b35); }
         .block[data-block="D"] { background: linear-gradient(135deg, #51cf66, #40c057); }
         .block[data-block="E"] { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
-        .block[data-block="F"] { background: linear-gradient(135deg, #1abc9c, #16a085); }
+        .block[data-block="F"] { background: linear-gradient(135deg, #4f83ff, #1e3c72); }
 
         .stacks-area {
             display: flex;
@@ -412,7 +412,8 @@
         .mini-block[data-block="C"] { background: linear-gradient(135deg, #ffe66d, #ff6b35); }
         .mini-block[data-block="D"] { background: linear-gradient(135deg, #51cf66, #40c057); }
         .mini-block[data-block="E"] { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
-        .mini-block[data-block="F"] { background: linear-gradient(135deg, #1abc9c, #16a085); }
+        .mini-block[data-block="F"] { background: linear-gradient(135deg, #4f83ff, #1e3c72); }
+
 
 
         @media (max-width: 768px) {
@@ -670,8 +671,8 @@
             
             const { type, params } = actionInfo;
             
-            if (type === 'MoveFromStackToStack') {
-                // MoveFromStackToStack(block, fromStack, toStack, step)
+            if (type === 'MoveFromStackToEmptyStack') {
+                // MoveFromStackToEmptyStack(block,fromStack,toStack,step)",
                 const [block, fromStack, toStack] = params;
                 const fromIdx = parseInt(fromStack) - 1; // Convert to 0-based
                 const toIdx = parseInt(toStack) - 1;
@@ -700,7 +701,7 @@
                 // Add block to destination stack (on top)
                 newState[toIdx].push(block);
                 
-            } else if (type === 'MoveFromBlockToStack') {
+            } else if (type === 'MoveFromBlockToEmptyStack') {
                 // MoveFromBlockToStack(block, sourceBlock, fromStack, toStack, step)
                 const [block, sourceBlock, fromStack, toStack] = params;
                 const fromIdx = parseInt(fromStack) - 1;
