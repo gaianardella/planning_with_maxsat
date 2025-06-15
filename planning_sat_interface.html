@@ -401,7 +401,7 @@
             font-size: 0.85em;
             color: white;
             user-select: none;
-            pointer-events: none; /* disabilita drag & drop */
+            pointer-events: none;
             box-shadow: 0 3px 6px rgba(0,0,0,0.15);
             border: 1.5px solid rgba(255,255,255,0.5);
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
@@ -519,7 +519,7 @@
         let draggedFromStack = null;
         let draggedFromState = null;
 
-        // Configurazioni predefinite per ogni numero di blocchi
+        // Default configuration for each number of blocks
         const defaultConfigurations = {
             3: {
                 initial: [['B', 'A'], ['C'], []],
@@ -586,38 +586,6 @@
             block.dataset.block = name;
             return block;
         }
-
-        // function renderMiniState(state, container) {
-        //     // Clear container
-        //     container.innerHTML = '';
-            
-        //     // Create mini stacks area
-        //     const miniStacksArea = document.createElement('div');
-        //     miniStacksArea.className = 'mini-stacks-area';
-            
-        //     // Create 3 mini stacks
-        //     for (let i = 0; i < 3; i++) {
-        //         const miniStack = document.createElement('div');
-        //         miniStack.className = 'mini-stack';
-                
-        //         const label = document.createElement('div');
-        //         label.className = 'mini-stack-label';
-        //         label.textContent = `S${i + 1}`;
-        //         miniStack.appendChild(label);
-                
-        //         // Add blocks to this stack
-        //         if (state[i]) {
-        //             state[i].forEach(blockName => {
-        //                 const miniBlock = createMiniBlock(blockName);
-        //                 miniStack.appendChild(miniBlock);
-        //             });
-        //         }
-                
-        //         miniStacksArea.appendChild(miniStack);
-        //     }
-            
-        //     container.appendChild(miniStacksArea);
-        // }
         
         function renderMiniState(state, container) {
             // Create mini stacks area
@@ -671,8 +639,8 @@
             
             const { type, params } = actionInfo;
             
-            if (type === 'MoveFromStackToEmptyStack') {
-                // MoveFromStackToEmptyStack(block,fromStack,toStack,step)",
+            if (type === 'MoveFromStackToStack') {
+                // MoveFromStackToStack(block,fromStack,toStack,step)",
                 const [block, fromStack, toStack] = params;
                 const fromIdx = parseInt(fromStack) - 1; // Convert to 0-based
                 const toIdx = parseInt(toStack) - 1;
@@ -701,7 +669,7 @@
                 // Add block to destination stack (on top)
                 newState[toIdx].push(block);
                 
-            } else if (type === 'MoveFromBlockToEmptyStack') {
+            } else if (type === 'MoveFromBlockToStack') {
                 // MoveFromBlockToStack(block, sourceBlock, fromStack, toStack, step)
                 const [block, sourceBlock, fromStack, toStack] = params;
                 const fromIdx = parseInt(fromStack) - 1;
@@ -906,8 +874,6 @@
             const resultsDiv = document.getElementById('results');
             const planStepsDiv = document.getElementById('planSteps');
             
-
-             // 🔹 Aggiorna il titolo in base al tipo di risoluzione
             const resultsTitle = resultsDiv.querySelector('h3');
             resultsTitle.textContent = result.max_sat
                 ? '📊 Planning Results: solved with Partial MaxSAT'
