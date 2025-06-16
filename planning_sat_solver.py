@@ -616,7 +616,7 @@ class SATPlanningSolver:
     def _solve_cnf_with_pysat(self, cnf: CNF, var_map: Dict[str, int], reverse_map: Dict[int, str]) -> Optional[Dict]:
         # Solve the SAT problem encoded in CNF using PySAT.
         # If a solution is found, extract a plan (sequence of actions) from the true literals in the model.
-        with Solver(bootstrap_with=cnf) as solver:
+        with Solver(bootstrap_with=cnf) as solver: #Minisat22
             if solver.solve():
                 model = solver.get_model()
                 true_literals = {
@@ -781,6 +781,7 @@ class SATPlanningSolver:
         self.clauses.extend(self.encode_initial_state())
         self.clauses.extend(self.encode_actions())
         self.clauses.extend(self.encode_frame_axioms())
+        self.clauses.extend(self.encode_stack_consistency())
 
         # Encode goal state and classify clauses as hard or soft
         goal_clauses = self.encode_goal_state(k)
